@@ -1,0 +1,24 @@
+services:
+  db:
+    image: postgres:16
+    container_name: indirim-yakalar-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: indirim
+      POSTGRES_PASSWORD: indirim
+      POSTGRES_DB: indirim_yakalar
+      # Locale sabit C.UTF-8: imajda tr_TR üretilmemiş durumda.
+      # Türkçe normalizasyon (I→ı, İ→i) Python tarafında yapılıyor, DB collation'ına gerek yok.
+      LANG: C.UTF-8
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U indirim -d indirim_yakalar"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
