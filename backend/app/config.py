@@ -39,6 +39,16 @@ class Settings(BaseSettings):
     # Kaynağa saygılı çekim
     collector_request_delay_sec: float = 2.0
 
+    # Günlük toplama zamanlayıcısı. Varsayılan KAPALI: uygulamayı başlatmak
+    # (test dahil) gerçek API'ye istek atmamalı. Üretimde .env'den açılır.
+    pipeline_autostart: bool = False
+    # Platform öğlen civarı indeksliyor (`indexTime`), sonrasında çekmek mantıklı.
+    pipeline_schedule_hour: int = 13
+    pipeline_schedule_minute: int = 0
+    # Boş bırakılırsa sistemin yerel saati kullanılır. Elle verilecekse IANA
+    # adı olmalı (ör. Europe/Istanbul) — Windows adları geçersizdir.
+    pipeline_timezone: str = ""
+
     # Analiz (Faz 2) — para/oran karşılaştırmaları Decimal ile yapılır
     price_drop_threshold_pct: Decimal = Decimal("5.0")
 

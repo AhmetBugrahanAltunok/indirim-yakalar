@@ -12,10 +12,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.collectors.market_fiyati import MarketFiyatiCollector
+from app import scheduler
 from app.database.session import get_db
 from app.models import PriceHistory, RawRecord, WatchlistItem, WatchlistSourceId
-from app.services.price_ingest import ham_kayitlari_isle
+from app.services.pipeline_runner import bugun_toplandi_mi, pipeline_calistir
 
 router = APIRouter(tags=["pipeline"], prefix="/pipeline")
 
@@ -43,15 +43,15 @@ class PipelineStatus(BaseModel):
     ilk_gozlem: date | None
     son_gozlem: date | None
     gozlem_gunu: int
+    bugun_toplandi: bool
+    zamanlayici_acik: bool
+    sonraki_kosu: str | None
 
 
 @router.post("/run/market-fiyati", response_model=PipelineRunResult)
 def market_fiyati_calistir(db: Session = Depends(get_db)) -> PipelineRunResult:
-    toplama = MarketFiyatiCollector().topla(db)
-
-    # Toplama yarıda kesilse bile o ana kadar yazılan ham kayıtlar işlenir —
-    # kısmi veri, veri yokluğundan iyidir.
-    isleme = ham_kayitlari_isle(db)
+    sonuc = pipeline_calistir(db)
+    toplama, isleme = sonuc.toplama, sonuc.isleme
 
     if toplama.durduruldu and toplama.basarili == 0:
         raise HTTPException(
@@ -84,8 +84,12 @@ def durum(db: Session = Depends(get_db)) -> PipelineStatus:
             func.count(func.distinct(PriceHistory.collected_date)),
         )
     ).one()
+    zamanlayici = scheduler.durum()
 
     return PipelineStatus(
+        bugun_toplandi=bugun_toplandi_mi(db),
+        zamanlayici_acik=zamanlayici["acik"],
+        sonraki_kosu=zamanlayici["sonraki_kosu"],
         takip_kalemi=db.scalar(
             select(func.count(WatchlistItem.id)).where(WatchlistItem.active.is_(True))
         ) or 0,
