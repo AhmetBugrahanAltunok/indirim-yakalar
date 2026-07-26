@@ -31,6 +31,7 @@ from app.models import (
     WatchlistSourceId,
 )
 from app.services.price_ingest import ham_kayitlari_isle
+from app.utils.tarih import yerel_bugun
 
 BUGUN = date(2026, 7, 26)
 
@@ -299,6 +300,39 @@ def test_normalize_alanlari_urune_yaziliyor(db, ortam) -> None:
     db.refresh(ortam["urun"])
     assert ortam["urun"].quantity == Decimal("250")
     assert ortam["urun"].unit == "ML"
+
+
+def test_gun_index_timedan_turuyor(db, ortam) -> None:
+    """`gun` verilmezse kayıt, platformun indekslediği güne yazılır.
+
+    Gece geç saatte çekilen veri çekim gününe yazılsaydı, aynı indeks iki
+    ayrı günmüş gibi sayılır ve uydurma bir gözlem üretilirdi.
+    """
+    api = SahteIstemci(_yanit("59.50", "70.00"))
+    MarketFiyatiCollector(api=api, settings=get_settings()).topla(db)
+    ham_kayitlari_isle(db)  # gun VERİLMEDİ
+
+    kayitlar = list(db.scalars(
+        select(PriceHistory).where(PriceHistory.product_id == ortam["urun"].id)
+    ))
+    assert kayitlar
+    # Sahte yanıttaki indexTime: "26.07.2026 12:00"
+    assert all(k.collected_date == date(2026, 7, 26) for k in kayitlar)
+
+
+def test_index_time_yoksa_yerel_gune_yaziliyor(db, ortam) -> None:
+    yanit = _yanit("59.50", "70.00")
+    for depo in yanit["content"][0]["productDepotInfoList"]:
+        depo.pop("indexTime", None)
+
+    api = SahteIstemci(yanit)
+    MarketFiyatiCollector(api=api, settings=get_settings()).topla(db)
+    ham_kayitlari_isle(db)
+
+    kayit = db.scalar(
+        select(PriceHistory).where(PriceHistory.product_id == ortam["urun"].id)
+    )
+    assert kayit.collected_date == yerel_bugun()
 
 
 def test_bozuk_ham_kayit_pipelineyi_durdurmuyor(db, ortam) -> None:

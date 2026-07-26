@@ -19,6 +19,7 @@ from app.collectors.market_fiyati_client import MarketFiyatiClient
 from app.config import Settings, get_settings
 from app.models import PriceHistory
 from app.services.price_ingest import IsleneSonucu, ham_kayitlari_isle
+from app.utils.tarih import yerel_bugun
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +42,11 @@ def bugun_toplandi_mi(db: Session, gun: date | None = None) -> bool:
 
     Zamanlayıcının telafi kararı buna dayanır: makine kapalıyken koşu kaçtıysa
     açılışta tamamlanır, ama aynı gün ikinci kez API yorulmaz.
+
+    ⚠️ YEREL gün kullanılır. UTC kullanılsaydı gün sınırı UTC+3'te gece 03:00'te
+    döner, gece yarısından sonraki koşular yanlış güne bakardı.
     """
-    gun = gun or datetime.now(timezone.utc).date()
+    gun = gun or yerel_bugun()
     return db.scalar(
         select(PriceHistory.id).where(PriceHistory.collected_date == gun).limit(1)
     ) is not None

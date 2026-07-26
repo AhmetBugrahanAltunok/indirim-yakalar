@@ -55,7 +55,9 @@ class PriceHistory(Base):
 
     # Platformun indeksleme anı (yanıttaki `indexTime`).
     index_time: Mapped[datetime | None] = mapped_column(DateTime)
-    # Bizim çekim günümüz — idempotency anahtarının parçası.
+    # Gözlemin ait olduğu gün — idempotency anahtarının parçası.
+    # `indexTime`'ın gününden türetilir; yoksa YEREL güne düşülür (UTC değil,
+    # yoksa gün sınırı UTC+3'te gece 03:00'te döner). Bkz. `utils/tarih.py`.
     collected_date: Mapped[date] = mapped_column(Date, index=True)
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

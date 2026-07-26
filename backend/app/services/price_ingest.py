@@ -26,6 +26,7 @@ from app.services.normalizer import (
     index_time_ayristir,
     para,
 )
+from app.utils.tarih import gozlem_gunu, yerel_bugun
 
 
 @dataclass
@@ -47,9 +48,13 @@ class IsleneSonucu:
 
 
 def ham_kayitlari_isle(db: Session, gun: date | None = None) -> IsleneSonucu:
-    """İşlenmemiş `raw_records` satırlarını `price_history`'ye aktarır."""
+    """İşlenmemiş `raw_records` satırlarını `price_history`'ye aktarır.
+
+    `gun` verilirse tüm satırlar o güne yazılır (testler ve elle düzeltme için).
+    Verilmezse her satırın günü kendi `indexTime`'ından türetilir; o da yoksa
+    yerel güne düşülür (bkz. `utils/tarih.gozlem_gunu`).
+    """
     sonuc = IsleneSonucu()
-    gun = gun or datetime.now(timezone.utc).date()
 
     depo_market = {
         d.id: d.market_id for d in db.scalars(select(Depot))
@@ -92,7 +97,7 @@ def ham_kayitlari_isle(db: Session, gun: date | None = None) -> IsleneSonucu:
 def _tek_kayit_isle(
     db: Session,
     kayit: RawRecord,
-    gun: date,
+    gun: date | None,
     depo_market: dict[str, int],
     market_slug_id: dict[str, int],
 ) -> tuple[int, int, int]:
@@ -128,13 +133,17 @@ def _tek_kayit_isle(
                 or depo_market[depo_id]
             )
 
+            index_time = index_time_ayristir(depo_bilgi.get("indexTime"))
+            satir_gunu = gun if gun is not None else gozlem_gunu(index_time)
+
             eklendi = _fiyat_yaz(
                 db,
                 product_id=urun.id,
                 depot_id=depo_id,
                 market_id=market_id,
-                gun=gun,
+                gun=satir_gunu,
                 fiyat=fiyat,
+                index_time=index_time,
                 depo_bilgi=depo_bilgi,
             )
             if eklendi:
@@ -188,6 +197,7 @@ def _fiyat_yaz(
     market_id: int,
     gun: date,
     fiyat: Decimal,
+    index_time: datetime | None,
     depo_bilgi: dict[str, Any],
 ) -> bool:
     """Fiyatı yazar veya aynı gün varsa günceller. Yeni yazıldıysa True.
@@ -204,7 +214,7 @@ def _fiyat_yaz(
         "percentage": para(depo_bilgi.get("percentage")),
         "unit_price_value": para(depo_bilgi.get("unitPriceValue")),
         "unit_price_text": (depo_bilgi.get("unitPrice") or None),
-        "index_time": index_time_ayristir(depo_bilgi.get("indexTime")),
+        "index_time": index_time,
     }
 
     onceki_var = db.scalar(
