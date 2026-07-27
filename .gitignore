@@ -8,8 +8,14 @@ venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.pytest-tmp/
 .mypy_cache/
 .ruff_cache/
+
+# Veritabanı yedekleri — gerçek fiyat/depo verisi ve konum içerir (anayasa md. 5).
+# Varsayılan yol repo dışında; yine de yanlışlıkla içeri kopyalanırsa tutulmasın.
+*.sql
+indirim-yakalar-yedek/
 
 # Node / frontend
 node_modules/

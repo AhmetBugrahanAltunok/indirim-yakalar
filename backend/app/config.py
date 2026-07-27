@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     # adı olmalı (ör. Europe/Istanbul) — Windows adları geçersizdir.
     pipeline_timezone: str = ""
 
+    # Yedekleme. Varsayılan yol repo DIŞINDA: yedek gerçek fiyat/depo verisi ve
+    # konum içerir, kazara commit'lenmemeli (anayasa md. 5).
+    backup_dir: str = str(_REPO_ROOT.parent / "indirim-yakalar-yedek")
+    backup_container: str = "indirim-yakalar-db"
+    backup_retention_days: int = 30
+
     # Analiz (Faz 2) — para/oran karşılaştırmaları Decimal ile yapılır
     price_drop_threshold_pct: Decimal = Decimal("5.0")
 
