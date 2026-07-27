@@ -1,4 +1,8 @@
-"""FastAPI uygulaması. Faz 1: sağlık + konum + takip listesi + pipeline."""
+"""FastAPI uygulaması.
+
+Faz 1: sağlık + konum + takip listesi + pipeline.
+Faz 2: karşılaştırma + fiyat geçmişi + WhatsApp mesajı.
+"""
 
 import logging
 from collections.abc import AsyncIterator
@@ -7,7 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app import scheduler
-from app.api import depots, health, pipeline, watchlist
+from app.api import analysis, depots, health, pipeline, watchlist
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,7 +36,7 @@ async def yasam_dongusu(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="İndirimYakalar",
     description="Market fiyatlarını toplayan, fiyat düşüşlerini yakalayan sistem.",
-    version="0.5.0",
+    version="0.6.0",
     lifespan=yasam_dongusu,
 )
 
@@ -40,3 +44,4 @@ app.include_router(health.router)
 app.include_router(depots.router)
 app.include_router(watchlist.router)
 app.include_router(pipeline.router)
+app.include_router(analysis.router)
