@@ -197,17 +197,43 @@ def test_zam_dusus_olarak_yazilmaz() -> None:
 # --- bölme ---------------------------------------------------------------
 
 
-def test_on_kalemde_bolunuyor() -> None:
-    analizler = [
+def _cok_kalem(adet: int) -> list[KalemAnalizi]:
+    return [
         _kalem(f"Ürün {i}", [_market("A101", "10"), _market("BİM", str(20 + i))],
                kalem_id=i)
-        for i in range(1, 26)
+        for i in range(1, adet + 1)
     ]
-    mesajlar = whatsapp_mesajlari(analizler, gun=BUGUN, settings=AYAR)
+
+
+def test_sinir_asilinca_bolunuyor() -> None:
+    mesajlar = whatsapp_mesajlari(
+        _cok_kalem(25), gun=BUGUN, settings=AYAR, kalem_siniri=10
+    )
     assert [m.kalem_sayisi for m in mesajlar] == [10, 10, 5]
     assert mesajlar[0].toplam_sayfa == 3
     assert "(1/3)" in mesajlar[0].metin
     assert "(3/3)" in mesajlar[2].metin
+
+
+def test_sinir_ayardan_okunuyor() -> None:
+    """`.env`'deki MESSAGE_ITEM_LIMIT, çağrıda sınır verilmediğinde geçerli."""
+    ayar = AYAR.model_copy(update={"message_item_limit": 5})
+    mesajlar = whatsapp_mesajlari(_cok_kalem(12), gun=BUGUN, settings=ayar)
+    assert [m.kalem_sayisi for m in mesajlar] == [5, 5, 2]
+
+
+def test_cagridaki_sinir_ayari_eziyor() -> None:
+    ayar = AYAR.model_copy(update={"message_item_limit": 5})
+    mesajlar = whatsapp_mesajlari(
+        _cok_kalem(12), gun=BUGUN, settings=ayar, kalem_siniri=100
+    )
+    assert len(mesajlar) == 1
+
+
+def test_varsayilan_sinir_yuz() -> None:
+    """29.07.2026: proje sahibi dosya sayısı artmasın diye yükseltilmesini istedi."""
+    mesajlar = whatsapp_mesajlari(_cok_kalem(40), gun=BUGUN, settings=AYAR)
+    assert len(mesajlar) == 1, "40 kalem tek mesajda kalmalı"
 
 
 def test_tek_sayfada_sayfa_numarasi_yazilmaz() -> None:
@@ -216,12 +242,9 @@ def test_tek_sayfada_sayfa_numarasi_yazilmaz() -> None:
 
 
 def test_kalem_siniri_degistirilebilir() -> None:
-    analizler = [
-        _kalem(f"Ürün {i}", [_market("A101", "10"), _market("BİM", str(20 + i))],
-               kalem_id=i)
-        for i in range(1, 6)
-    ]
-    mesajlar = whatsapp_mesajlari(analizler, gun=BUGUN, settings=AYAR, kalem_siniri=2)
+    mesajlar = whatsapp_mesajlari(
+        _cok_kalem(5), gun=BUGUN, settings=AYAR, kalem_siniri=2
+    )
     assert [m.kalem_sayisi for m in mesajlar] == [2, 2, 1]
 
 

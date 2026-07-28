@@ -129,17 +129,29 @@ def test_dizin_yoksa_olusturuluyor(db, tmp_path) -> None:
 
 
 def test_cok_sayfada_ayri_dosyalar(db, tmp_path) -> None:
-    """Tek dosyada birleştirmek 10 ürün sınırını anlamsız kılardı (SPEC §7)."""
+    """Tek dosyada birleştirmek ürün sınırını anlamsız kılardı (SPEC §7)."""
     for i in range(12):
         _kalem_kur(db, f"Ürün {i}", f"{ONEK}1{i:02d}",
                    {"a101": "10.00", "bim": str(20 + i)})
 
-    yollar = mesajlari_yaz(db, gun=GUN, settings=_ayar(tmp_path))
+    ayar = _ayar(tmp_path).model_copy(update={"message_item_limit": 10})
+    yollar = mesajlari_yaz(db, gun=GUN, settings=ayar)
     assert len(yollar) == 2
     assert [y.name for y in yollar] == [
         f"mesaj-{GUN.isoformat()}-1.txt",
         f"mesaj-{GUN.isoformat()}-2.txt",
     ]
+
+
+def test_varsayilan_sinirda_tek_dosya(db, tmp_path) -> None:
+    """Proje sahibinin isteği: dosya sayısı artmasın (29.07.2026)."""
+    for i in range(12):
+        _kalem_kur(db, f"Ürün {i}", f"{ONEK}2{i:02d}",
+                   {"a101": "10.00", "bim": str(20 + i)})
+
+    yollar = mesajlari_yaz(db, gun=GUN, settings=_ayar(tmp_path))
+    assert len(yollar) == 1
+    assert yollar[0].name == f"mesaj-{GUN.isoformat()}.txt"
 
 
 def test_tek_sayfada_numara_eki_yok(db, tmp_path) -> None:

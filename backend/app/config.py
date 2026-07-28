@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     # Günlük koşunun WhatsApp mesajını yazacağı klasör. Boş bırakılırsa
     # `backup_dir` kullanılır — kullanıcı zaten log ve yedek için oraya bakıyor.
     message_dir: str = ""
+    # Mesaj başına ürün sayısı. SPEC §7 10 diyordu; proje sahibi 29.07.2026'da
+    # "dosya sayısı artmasın" diye yükseltilmesini istedi. Bölme mekanizması
+    # duruyor — liste büyürse tek mesaj okunmaz hale gelmesin.
+    message_item_limit: int = 100
 
     # Analiz (Faz 2) — para/oran karşılaştırmaları Decimal ile yapılır
     price_drop_threshold_pct: Decimal = Decimal("5.0")

@@ -115,7 +115,10 @@ def fiyat_gecmisi(kalem_id: int, db: Session = Depends(get_db)) -> FiyatGecmisiO
 @router.get("/messages/whatsapp-preview", response_model=MesajYanit)
 def whatsapp_onizleme(
     db: Session = Depends(get_db),
-    kalem_siniri: int = Query(10, ge=1, le=50, description="Mesaj başına ürün"),
+    kalem_siniri: int | None = Query(
+        None, ge=1, le=200,
+        description="Mesaj başına ürün. Verilmezse MESSAGE_ITEM_LIMIT geçerli.",
+    ),
 ) -> MesajYanit:
     """Panoya kopyalanmaya hazır mesaj(lar). Otomatik gönderim YOK."""
     analizler = tum_kalemleri_analiz_et(db)

@@ -2,6 +2,10 @@
 
 Mesaj otomatik GÖNDERİLMEZ; panoya kopyalanmak üzere üretilir.
 
+Mesaj başına ürün sayısı `.env`'den (`MESSAGE_ITEM_LIMIT`, varsayılan 100).
+SPEC §7 10 diyordu; proje sahibi 29.07.2026'da dosya sayısı artmasın diye
+yükseltilmesini istedi. Bölme mekanizması yerinde duruyor.
+
 Neyin mesaja gireceği bilinçli olarak dar tutuldu. 76 takip kaleminin hepsini
 yazmak mesajı okunmaz eder ve asıl bilgiyi gömer. Girenler:
   1. Eşiği aşan fiyat düşüşü olanlar (en çok düşen başta)
@@ -22,9 +26,6 @@ from app.services.analyzer import KalemAnalizi, dusenler
 from app.utils.bicim import para_yaz, tarih_yaz, yuzde_yaz
 from app.utils.tarih import yerel_bugun
 
-# SPEC §7: mesaj başına en fazla 10 ürün.
-VARSAYILAN_KALEM_SINIRI = 10
-
 AYRAC = "────────────"
 
 
@@ -40,16 +41,19 @@ def whatsapp_mesajlari(
     analizler: list[KalemAnalizi],
     *,
     gun: date | None = None,
-    kalem_siniri: int = VARSAYILAN_KALEM_SINIRI,
+    kalem_siniri: int | None = None,
     settings: Settings | None = None,
 ) -> list[Mesaj]:
     """Analizlerden bölünmüş WhatsApp mesajları üretir.
+
+    `kalem_siniri` verilmezse `.env`'deki `MESSAGE_ITEM_LIMIT` geçerlidir.
 
     Söylenecek bir şey yoksa BOŞ liste döner — "indirim yok" diye mesaj
     üretmek, kullanıcıyı boş yere bildirime boğardı.
     """
     settings = settings or get_settings()
     bugun = gun or yerel_bugun()
+    kalem_siniri = kalem_siniri or settings.message_item_limit
 
     secilen = _mesaja_girecekler(analizler, settings=settings)
     if not secilen:
