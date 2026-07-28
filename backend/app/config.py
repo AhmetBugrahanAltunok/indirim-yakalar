@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     backup_container: str = "indirim-yakalar-db"
     backup_retention_days: int = 30
 
+    # Günlük koşunun WhatsApp mesajını yazacağı klasör. Boş bırakılırsa
+    # `backup_dir` kullanılır — kullanıcı zaten log ve yedek için oraya bakıyor.
+    message_dir: str = ""
+
     # Analiz (Faz 2) — para/oran karşılaştırmaları Decimal ile yapılır
     price_drop_threshold_pct: Decimal = Decimal("5.0")
 

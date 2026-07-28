@@ -1,4 +1,4 @@
-"""Günlük koşu: topla → işle → yedekle.
+"""Günlük koşu: topla → işle → mesajı yaz → yedekle.
 
 Windows Görev Zamanlayıcı bunu çağırır (bkz. `scripts/gunluk-kosu.cmd`).
 Uygulamanın açık olmasına gerek yoktur — `app/scheduler.py` yalnız FastAPI
@@ -24,6 +24,7 @@ from app.services.backup import (
     eski_yedekleri_temizle,
     yedek_al,
 )
+from app.services.message_export import eski_mesajlari_temizle, mesajlari_yaz
 from app.services.pipeline_runner import bugun_toplandi_mi, pipeline_calistir
 from app.utils.tarih import yerel_bugun
 
@@ -68,6 +69,16 @@ def main(argv: list[str] | None = None) -> int:
             if not sonuc.basarili_mi:
                 logger.error("Hiç kayıt alınamadı — yedek adımına geçilmiyor.")
                 return 1
+
+        # Mesaj yazımı yedekten ÖNCE ve kendi hatasına dayanıklı: mesaj
+        # üretilemese bile toplanan veri yedeklenmeli.
+        try:
+            for yol in mesajlari_yaz(db, gun=gun):
+                logger.info("Mesaj: %s", yol)
+            for silinen in eski_mesajlari_temizle(gun=gun):
+                logger.info("Eski mesaj silindi: %s", silinen.name)
+        except Exception as hata:  # noqa: BLE001 — koşuyu düşürmemeli
+            logger.error("Mesaj dosyası yazılamadı: %s", hata)
     finally:
         db.close()
 

@@ -18,12 +18,13 @@ from __future__ import annotations
 import logging
 import subprocess
 from collections.abc import Callable, Sequence
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 from sqlalchemy.engine import make_url
 
 from app.config import Settings, get_settings
+from app.utils.dosya import tarihli_dosyalari_temizle
 from app.utils.tarih import yerel_bugun
 
 logger = logging.getLogger(__name__)
@@ -182,25 +183,13 @@ def eski_yedekleri_temizle(
     settings = settings or get_settings()
     gun = gun or yerel_bugun()
 
-    dizin = _yedek_dizini(settings)
-    if not dizin.exists():
-        return []
-
-    sinir = gun - timedelta(days=settings.backup_retention_days)
-    silinen: list[Path] = []
-
-    for dosya in sorted(dizin.glob(f"{DOSYA_ONEKI}*{DOSYA_UZANTISI}")):
-        etiket = dosya.stem[len(DOSYA_ONEKI):]
-        try:
-            dosya_gunu = date.fromisoformat(etiket)
-        except ValueError:
-            # Adı desenimize uymayan dosyaya DOKUNULMAZ — bizim ürettiğimiz
-            # olmayabilir, silmek veri kaybı olur.
-            continue
-        if dosya_gunu < sinir:
-            dosya.unlink()
-            silinen.append(dosya)
-
+    silinen = tarihli_dosyalari_temizle(
+        _yedek_dizini(settings),
+        onek=DOSYA_ONEKI,
+        uzanti=DOSYA_UZANTISI,
+        gun=gun,
+        saklanan_gun=settings.backup_retention_days,
+    )
     if silinen:
         logger.info("%d eski yedek silindi", len(silinen))
     return silinen
