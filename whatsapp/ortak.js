@@ -62,12 +62,29 @@ function numarayiCozumle(ham) {
   return `${rakamlar}@c.us`;
 }
 
+// whatsapp-web.js, WhatsApp Web'in canli sayfasina kod enjekte ediyor. Sayfa
+// degistiginde kutuphane kiriliyor ve "Protocol error (Runtime.callFunctionOn):
+// Execution context was destroyed" veriyor — QR bile cikmiyor. Bilinen tek
+// hafifletme, sayfayi bilinen bir surume sabitlemek.
+// Kirilirsa: wppconnect-team/wa-version deposundan daha yeni bir surum secilir.
+const VARSAYILAN_WEB_SURUMU = "2.3000.1041716477-alpha";
+
+function webSurumOnbellegi() {
+  const surum = (process.env.WHATSAPP_WEB_VERSION || "").trim() || VARSAYILAN_WEB_SURUMU;
+  if (surum.toLowerCase() === "kapali") return undefined;
+  return {
+    type: "remote",
+    remotePath: `https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/${surum}.html`,
+  };
+}
+
 function istemciOlustur() {
   const dizin = oturumDizini();
   fs.mkdirSync(dizin, { recursive: true });
 
   return new Client({
     authStrategy: new LocalAuth({ dataPath: dizin }),
+    webVersionCache: webSurumOnbellegi(),
     puppeteer: {
       headless: true,
       executablePath: chromeYolu(),

@@ -21,6 +21,21 @@ const MESAJ_ARASI_MS = 3000;
 
 class YapilandirmaHatasi extends Error {}
 class OturumYok extends Error {}
+class AliciYok extends Error {}
+
+// Hata yolunda da kapatabilmek icin main() disinda tutuluyor.
+let acikIstemci = null;
+
+/**
+ * QR istendi mi. TESHIS ICIN KRITIK.
+ *
+ * Oturum dustugunde whatsapp-web.js once "qr" yayiyor, sonra tarayici
+ * kapanirken "Protocol error: Execution context was destroyed" firlatiyor.
+ * O hata yarisi kazanirsa cikis kodu 5 (genel hata) oluyor ve kullanici
+ * log'da "gonderim hatasi" gorup baglan.js calistirmasi gerektigini
+ * anlamiyor. QR gorulduyse tanı her zaman "oturum yok"tur.
+ */
+let qrGoruldu = false;
 
 function dosyalariOku(yollar) {
   if (yollar.length === 0) {
@@ -38,6 +53,26 @@ function dosyalariOku(yollar) {
   });
 }
 
+/**
+ * Tarayiciyi kapatir. HER cikis yolunda cagrilmali.
+ *
+ * Cagrilmazsa Chromium OKSUZ KALIR: gunluk kosuda her hatada bir chrome.exe
+ * birikir ve makine yavaslar. process.exit() cocuk surecleri kendiliginde
+ * oldurmez.
+ */
+async function kapat(istemci) {
+  if (!istemci) return;
+  try {
+    // destroy() bazen asili kaliyor; 10 sn sonra yine de cikilir.
+    await Promise.race([
+      istemci.destroy(),
+      new Promise((c) => setTimeout(c, 10_000)),
+    ]);
+  } catch {
+    // Kapatirken cikan hata, asil hatayi golgelememeli.
+  }
+}
+
 async function main() {
   const alici = (process.env.WHATSAPP_RECIPIENT || "").trim();
   if (!alici) {
@@ -49,17 +84,19 @@ async function main() {
   const metinler = dosyalariOku(process.argv.slice(2));
   const hedef = numarayiCozumle(alici);
   const istemci = istemciOlustur();
+  acikIstemci = istemci;
 
   const hazir = new Promise((coz, reddet) => {
     istemci.on("ready", coz);
     // Kayitli oturum varken QR istenmesi, oturumun DUSTUGU anlamina gelir.
-    istemci.on("qr", () =>
+    istemci.on("qr", () => {
+      qrGoruldu = true;
       reddet(
         new OturumYok(
           "Oturum dusmus (QR isteniyor). Cozum: node whatsapp/baglan.js",
         ),
-      ),
-    );
+      );
+    });
     istemci.on("auth_failure", (m) =>
       reddet(new OturumYok(`Kimlik dogrulama basarisiz: ${m}`)),
     );
@@ -75,9 +112,7 @@ async function main() {
   // gondermek sessizce bosluga mesaj atmak olur.
   const kimlik = await istemci.getNumberId(hedef.replace("@c.us", ""));
   if (!kimlik) {
-    await istemci.destroy();
-    console.error(`ALICI_YOK: ${alici} WhatsApp'ta kayitli degil.`);
-    process.exit(4);
+    throw new AliciYok(`${alici} WhatsApp'ta kayitli degil.`);
   }
 
   for (const [sira, metin] of metinler.entries()) {
@@ -87,16 +122,40 @@ async function main() {
     await istemci.sendMessage(kimlik._serialized, metin);
     console.log(`gonderildi ${sira + 1}/${metinler.length} (${metin.length} karakter)`);
   }
-
-  await istemci.destroy();
 }
 
+function kodBelirle(hata) {
+  if (hata instanceof YapilandirmaHatasi) return 2;
+  if (hata instanceof AliciYok) return 4;
+  // QR gorulduyse asil sebep oturumun dusmesidir; tarayici kapanirken cikan
+  // protokol hatasi yarisi kazanmis olabilir, ona bakip yanlis teshis koyma.
+  if (hata instanceof OturumYok || qrGoruldu) return 3;
+  if (String(hata.message).startsWith("SURE_ASIMI")) return 6;
+  return 5;
+}
+
+// Son emniyet: her sey ters giderse bile surec asili kalmasin. Gorev
+// Zamanlayici asili sureci bekler ve ertesi gunku kosu ustune biner.
+const oldurucu = setTimeout(() => {
+  console.error("HATA: sert sure asimi — surec zorla kapatiliyor.");
+  process.exit(6);
+}, (Number(process.env.WHATSAPP_HARD_TIMEOUT_SEC) || 300) * 1000);
+oldurucu.unref();
+
 main()
-  .then(() => process.exit(0))
+  .then(async () => {
+    await kapat(acikIstemci);
+    process.exit(0);
+  })
   .catch(async (hata) => {
-    console.error(`HATA: ${hata.message}`);
-    if (hata instanceof YapilandirmaHatasi) process.exit(2);
-    if (hata instanceof OturumYok) process.exit(3);
-    if (String(hata.message).startsWith("SURE_ASIMI")) process.exit(6);
-    process.exit(5);
+    const kod = kodBelirle(hata);
+    if (kod === 3 && !(hata instanceof OturumYok)) {
+      console.error(
+        `HATA: Oturum dusmus. Cozum: node whatsapp/baglan.js  (asil belirti: ${hata.message})`,
+      );
+    } else {
+      console.error(`HATA: ${hata.message}`);
+    }
+    await kapat(acikIstemci);
+    process.exit(kod);
   });
