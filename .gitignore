@@ -22,6 +22,12 @@ node_modules/
 dist/
 .vite/
 
+# WhatsApp oturumu — kimlik doğrulama anahtarı içerir (anayasa md. 5).
+# Varsayılan yol repo dışında; yine de içeri kopyalanırsa tutulmasın.
+indirim-yakalar-oturum/
+.wwebjs_auth/
+.wwebjs_cache/
+
 # Araçlar
 .idea/
 .vscode/

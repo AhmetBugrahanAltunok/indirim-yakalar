@@ -1,4 +1,4 @@
-"""Günlük koşu: topla → işle → mesajı yaz → yedekle.
+"""Günlük koşu: topla → işle → mesajı yaz → WhatsApp'tan gönder → yedekle.
 
 Windows Görev Zamanlayıcı bunu çağırır (bkz. `scripts/gunluk-kosu.cmd`).
 Uygulamanın açık olmasına gerek yoktur — `app/scheduler.py` yalnız FastAPI
@@ -26,6 +26,7 @@ from app.services.backup import (
 )
 from app.services.message_export import eski_mesajlari_temizle, mesajlari_yaz
 from app.services.pipeline_runner import bugun_toplandi_mi, pipeline_calistir
+from app.services.whatsapp_sender import WhatsAppHatasi, mesajlari_gonder
 from app.utils.tarih import yerel_bugun
 
 logging.basicConfig(
@@ -46,6 +47,11 @@ def main(argv: list[str] | None = None) -> int:
         "--yedeksiz",
         action="store_true",
         help="Yedek alma adımını atla (Docker yoksa elle koşu için)",
+    )
+    ayristirici.add_argument(
+        "--gondersiz",
+        action="store_true",
+        help="WhatsApp gönderimini atla (dosya yine yazılır)",
     )
     args = ayristirici.parse_args(argv)
 
@@ -72,13 +78,24 @@ def main(argv: list[str] | None = None) -> int:
 
         # Mesaj yazımı yedekten ÖNCE ve kendi hatasına dayanıklı: mesaj
         # üretilemese bile toplanan veri yedeklenmeli.
+        yazilan: list = []
         try:
-            for yol in mesajlari_yaz(db, gun=gun):
+            yazilan = mesajlari_yaz(db, gun=gun)
+            for yol in yazilan:
                 logger.info("Mesaj: %s", yol)
             for silinen in eski_mesajlari_temizle(gun=gun):
                 logger.info("Eski mesaj silindi: %s", silinen.name)
         except Exception as hata:  # noqa: BLE001 — koşuyu düşürmemeli
             logger.error("Mesaj dosyası yazılamadı: %s", hata)
+
+        # Gönderim ayrı korumada: WhatsApp tarafı kırılgan (oturum düşebilir,
+        # tarayıcı açılmayabilir) ama bu, toplanan verinin yedeklenmesini
+        # engellememeli. Dosya zaten diskte, elle de gönderilebilir.
+        if not args.gondersiz:
+            try:
+                mesajlari_gonder(yazilan)
+            except WhatsAppHatasi as hata:
+                logger.error("WhatsApp gönderilemedi: %s", hata)
     finally:
         db.close()
 

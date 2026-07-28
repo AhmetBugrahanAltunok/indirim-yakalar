@@ -1,0 +1,15 @@
+{
+  "name": "indirim-yakalar-whatsapp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gunluk mesaji kullanicinin kendi WhatsApp oturumundan gonderir.",
+  "type": "commonjs",
+  "scripts": {
+    "baglan": "node baglan.js",
+    "gonder": "node gonder.js"
+  },
+  "dependencies": {
+    "whatsapp-web.js": "^1.34.1",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

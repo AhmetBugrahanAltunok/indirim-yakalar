@@ -63,6 +63,22 @@ class Settings(BaseSettings):
     # duruyor — liste büyürse tek mesaj okunmaz hale gelmesin.
     message_item_limit: int = 100
 
+    # --- WhatsApp gönderimi ---
+    # ⚠️ Resmî API DEĞİL: kullanıcının kendi WhatsApp Web oturumu taklit edilir
+    # (whatsapp-web.js). Kullanım şartlarına aykırıdır, numara kapatılma riski
+    # taşır. Proje sahibi riski bilerek kabul etti (29.07.2026).
+    # Varsayılan KAPALI: hiçbir kurulum kazara mesaj göndermemeli.
+    whatsapp_enabled: bool = False
+    # Alıcı numarası ülke koduyla, ör. 905550000000. KİŞİSEL VERİ — yalnız
+    # `.env`'de durur, commit edilmez (anayasa md. 5).
+    whatsapp_recipient: str = ""
+    # Oturum anahtarları burada; repo DIŞINDA olmalı.
+    whatsapp_session_dir: str = str(_REPO_ROOT.parent / "indirim-yakalar-oturum")
+    whatsapp_node_path: str = ""
+    whatsapp_chrome_path: str = ""
+    # Gönderim tarayıcı açıp WhatsApp Web'i yüklüyor; yavaş makinede uzayabilir.
+    whatsapp_timeout_sec: int = 240
+
     # Analiz (Faz 2) — para/oran karşılaştırmaları Decimal ile yapılır
     price_drop_threshold_pct: Decimal = Decimal("5.0")
 
