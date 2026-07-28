@@ -150,8 +150,7 @@ def _dusus_yaz(analiz: KalemAnalizi, bugun: date) -> str:
     dusus = analiz.dusus
     assert dusus is not None
 
-    once = _gun_ifadesi(dusus.onceki_gun, bugun)
-    sonra = _gun_ifadesi(dusus.son_gun, bugun)
+    once, sonra = _gun_ciftini_yaz(dusus.onceki_gun, dusus.son_gun, bugun)
 
     if dusus.market_degisti_mi:
         # Fiyat, eski market indirim yaptığı için değil, daha ucuz bir market
@@ -169,8 +168,21 @@ def _dusus_yaz(analiz: KalemAnalizi, bugun: date) -> str:
     return f"🔻 Düştü ({yuzde_yaz(dusus.yuzde)}): {govde}"
 
 
-def _gun_ifadesi(gun: date, bugun: date) -> str:
-    """"bugün"/"dün" YALNIZ gerçekten öyleyse.
+def _gun_ciftini_yaz(onceki: date, son: date, bugun: date) -> tuple[str, str]:
+    """İki günü AYNI biçimde yazar — ya ikisi de göreli ya ikisi de tarih.
+
+    Karışık yazım okunmuyor: 29.07'de bakarken 27.07→28.07 düşüşü
+    "27.07.2026 227,50 TL → dün 199,00 TL" diye çıkıyordu. Doğruydu ama
+    okuyan iki ucu kıyaslayamıyordu. Biri göreli yazılamıyorsa ikisi de tarih.
+    """
+    ifadeler = (_gun_ifadesi(onceki, bugun), _gun_ifadesi(son, bugun))
+    if all(i is not None for i in ifadeler):
+        return ifadeler  # type: ignore[return-value]
+    return tarih_yaz(onceki), tarih_yaz(son)
+
+
+def _gun_ifadesi(gun: date, bugun: date) -> str | None:
+    """"bugün"/"dün" YALNIZ gerçekten öyleyse; değilse None.
 
     Pipeline kişisel makinede koşuyor ve makine kapalıyken gün atlanıyor;
     araya 13 gün girmişken "dün" yazmak düpedüz yanlış bilgi olurdu
@@ -181,4 +193,4 @@ def _gun_ifadesi(gun: date, bugun: date) -> str:
         return "bugün"
     if fark == 1:
         return "dün"
-    return tarih_yaz(gun)
+    return None

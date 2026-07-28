@@ -152,12 +152,29 @@ def test_dun_bugun_gercekten_oyleyse_yazilir() -> None:
     assert "🔻 Düştü (%15): dün 70,00 TL → bugün 59,50 TL" in metin
 
 
-def test_gun_bosluğunda_gercek_tarihler_yazilir() -> None:
+def test_gun_boslugunda_gercek_tarihler_yazilir() -> None:
     """Makine kapalıyken gün atlandıysa "dün" yazmak yalan olur (SPEC §6.3)."""
     eski = BUGUN - timedelta(days=13)
     metin = _tek_metin([_dusen(onceki_gun=eski)])
     assert "dün" not in metin
-    assert "15.07.2026 70,00 TL → bugün 59,50 TL" in metin
+    assert "15.07.2026 70,00 TL → 28.07.2026 59,50 TL" in metin
+
+
+def test_iki_gun_ayni_bicimde_yazilir() -> None:
+    """29.07'de 27.07→28.07 düşüşü "27.07.2026 ... → dün ..." diye çıkıyordu.
+
+    Doğruydu ama bir ucu tarih bir ucu göreli olunca okuyan kıyaslayamıyordu.
+    """
+    onceki = BUGUN - timedelta(days=2)
+    son = BUGUN - timedelta(days=1)
+    metin = _tek_metin([_dusen(onceki_gun=onceki, son_gun=son)])
+    assert "dün" not in metin
+    assert "26.07.2026 70,00 TL → 27.07.2026 59,50 TL" in metin
+
+
+def test_ikisi_de_goreliyse_goreli_kalir() -> None:
+    metin = _tek_metin([_dusen()])
+    assert "dün 70,00 TL → bugün 59,50 TL" in metin
 
 
 def test_market_degistiyse_isimler_yaziliyor() -> None:
