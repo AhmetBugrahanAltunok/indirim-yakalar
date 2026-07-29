@@ -1,15 +1,18 @@
 # İndirimYakalar
 
-Market fiyatlarını her gün toplayan, aynı ürünün marketler arasındaki farkını ve
-zaman içindeki düşüşünü bulan, sonucu WhatsApp'ta paylaşılabilir sade bir mesaja
-çeviren kişisel bir sistem.
+A personal system that collects Turkish grocery prices daily, finds the cheapest
+chain for each tracked product and any price drops over time, then turns the
+result into a plain WhatsApp message you can share.
 
-Türkiye'deki market zincirlerinin fiyatlarını [marketfiyati.org.tr](https://marketfiyati.org.tr)
-üzerinden okur. Kendi takip listeni kurarsın (76 kalemlik bir liste örnek olarak
-geliyor), sistem her gün fiyatları çeker ve birkaç günde bir "şu an en ucuz nerede,
-ne düştü" mesajı üretir.
+Prices come from [marketfiyati.org.tr](https://marketfiyati.org.tr), a public
+price-comparison platform covering the major Turkish grocery chains. You define a
+watchlist (a 76-item starter list ships with the project), the system pulls prices
+every day and every few days produces a "cheapest right now, and what dropped"
+message.
 
-## Ne üretiyor
+## What it produces
+
+Output is Turkish, since that's who the message is for:
 
 ```
 🛒 *Son Gözlem — Market Fiyatları*
@@ -31,84 +34,88 @@ Migros: 399,95 TL
 ────────────
 ```
 
-Mesaj bir metin dosyasına ve tıklanabilir bir HTML sayfasına yazılır. Sayfadaki
-düğme WhatsApp'ı mesaj yazılı halde açar; göndermeye sen karar verirsin.
+The message is written to a text file and to a clickable HTML page. The page's
+button opens WhatsApp with the message pre-filled — you decide whether to send it.
 
-## Neden ilginç
+## Why it's interesting
 
-Platformun verisi ilk bakışta göründüğü gibi değil. Projenin çoğu, gerçek veriyle
-çalışırken çıkan şu bulgular üzerine kurulu:
+The platform's data is not what it looks like at first glance. Most of this
+project's design comes from findings made while working with real data:
 
-**Aynı fiziksel ürün birden çok katalog kaydında olabiliyor.** Platform katalogu
-zincir başına besliyor ve her zaman birleştirmiyor. Kayıtların depo kümeleri
-**ayrık** oluyor ve her kayıt kendi içinde "en ucuz"unu ilan ediyor. Tek kayda
-bakan kullanıcı %8,3 daha pahalıya yönlendirilebiliyor. Bu yüzden burada bir takip
-kalemi 1..N platform kaydına bağlanır ve en ucuz hepsi birleştirilerek hesaplanır.
+**The same physical product can live in several catalog records.** The platform
+builds its catalog per chain and doesn't always merge them. Duplicate records have
+**disjoint depot sets**, and each record declares its own "cheapest" within itself.
+A user looking at a single record can be pointed to a price 8.3% higher than what's
+actually available. So here a watchlist item links to 1..N platform records, and
+the cheapest price is computed across all of them.
 
-**Aynı zincirin şubeleri farklı fiyat verebiliyor** — aynı üründe iki şube
-arasında %27 fark görüldü. Zincir düzeyinde en ucuz şube alınır, mesajda şube
-iddia edilmez.
+**Branches of the same chain can quote different prices** — a 27% spread was
+observed between two branches of one chain for the same product. The system takes
+the cheapest branch per chain and never claims a specific branch in the message.
 
-**Arama sonuçları günden güne değişiyor.** Bir kelime araması ertesi gün 7 üründen
-5'ini döndürmedi, ama o ürünlerin ID'leri canlıydı. Bu yüzden takip kelimeyle değil
-**ürün kimliğiyle** yapılır; kimliklerin günler arası kalıcı olduğu doğrulandı.
+**Search results drift between days.** A keyword query returned 5 of 7 products the
+next day — but every one of those product IDs was still alive when queried
+directly. So tracking is done by **product identity**, never by keyword. ID
+persistence across days was verified before relying on it.
 
-**Ürünün depo kümesi de oynuyor.** Aynı ürün bir gün bir şubede, ertesi gün başka
-bir şubede görünebiliyor — fiyat aynıyken. Zaman serisi bu yüzden depo değil zincir
-düzeyinde kurulur.
+**A product's depot set moves too.** The same product appeared under one branch on
+one day and a different branch the next, at an identical price. Time series are
+therefore built at chain level, not depot level — a naive depot-level view would
+show phantom gaps.
 
-## Nasıl çalışıyor
+## How it works
 
 ```
-gunluk_kosu.py  (her gün, Windows Görev Zamanlayıcı)
+gunluk_kosu.py  (daily, via Windows Task Scheduler)
    │
-   ├─ topla ......... her takip ID'si için platform API'si → raw_records (ham, dokunulmamış)
-   ├─ işle .......... normalize → price_history (ürün + depo + gün = tek satır)
-   ├─ analiz ........ en ucuz zincir + son mesajdan bu yana düşüş
-   ├─ mesaj ......... N günde bir .txt + tıklanabilir .html
-   └─ yedekle ....... pg_dump, repo dışına
+   ├─ collect ..... platform API per tracked ID → raw_records (verbatim, untouched)
+   ├─ ingest ...... normalize → price_history (product + depot + day = one row)
+   ├─ analyze ..... cheapest chain + drops since the last message
+   ├─ message ..... every N days: .txt + clickable .html
+   └─ backup ...... pg_dump, written outside the repo
 ```
 
-Birkaç tasarım kuralı:
+Design rules worth knowing:
 
-- **Para her yerde `Decimal`.** DB'de `NUMERIC(10,2)`, JSON `parse_float=Decimal`
-  ile ayrıştırılır. Float yasak.
-- **Ham veri kutsal.** Collector platformun yanıtını değiştirmeden saklar;
-  normalize etme sonradan ve tekrarlanabilir. Ayrıştırma hatası bulunursa kaynak
-  tekrar yorulmadan yeniden üretilir.
-- **Gün sınırı `indexTime`'dan türer**, çekim saatinden değil. UTC kullanmak
-  UTC+3'te günü gece 03:00'te döndürüyor ve gece koşusu bir önceki günün verisini
-  eziyordu.
-- **Kıyas yoksa iddia yok.** "En ucuz" ancak birden fazla marketin fiyatı
-  biliniyorsa ve en az biri daha pahalıysa denir. Hepsi aynıysa "tüm marketlerde
-  aynı", tek market biliniyorsa "yalnızca X'te" yazılır.
-- **Uydurma tarih yok.** "dün" yalnız gerçekten dünse yazılır; makine kapalı
-  kaldıysa araya gün girer ve gerçek tarihler basılır.
+- **Money is `Decimal` everywhere.** `NUMERIC(10,2)` in the database, JSON parsed
+  with `parse_float=Decimal`. Floats are banned.
+- **Raw data is sacred.** Collectors store the platform's response unmodified;
+  normalization happens later and is repeatable. If a parsing bug is found, the
+  history can be rebuilt without hitting the source again.
+- **Day boundaries come from the platform's `indexTime`,** not from when we
+  fetched. Using UTC rolled the day at 03:00 local time (UTC+3), so a run just
+  after midnight overwrote the previous day's data.
+- **No claim without a comparison.** "Cheapest" is only said when more than one
+  chain's price is known *and* at least one is more expensive. If all are equal it
+  says so; if only one chain is known it says "only at X".
+- **No invented dates.** "Yesterday" is used only when it really was yesterday. If
+  the machine was off and days were skipped, real dates are printed instead.
 
-## Veri kaynağına saygı
+## Respecting the data source
 
-Platformun WAF'ı agresif: bilinmeyen uç noktalara ve tanınmayan gövde alanlarına
-`HTTP 418` ile blok veriyor. Bu yüzden:
+The platform's WAF is aggressive: unknown endpoints and unrecognized body fields
+are blocked with `HTTP 418`. Accordingly:
 
-- Tüm HTTP tek bir istemciden geçer (`collectors/market_fiyati_client.py`)
-- Yalnız gözlemlenmiş uç noktalar ve alanlar kullanılır, hiçbiri tahmin edilmez
-- İstekler arasında zorunlu bekleme var (varsayılan 2 sn)
-- `418` görülürse toplama **derhal** durur
+- All HTTP goes through a single client (`collectors/market_fiyati_client.py`)
+- Only observed endpoints and fields are used — none are ever guessed
+- A mandatory delay sits between requests (2s by default)
+- On `418`, collection stops **immediately**
 
-Günde bir koşu, takip listesi başına ~80 istek. Bu proje kişisel kullanım içindir.
+One run per day, roughly 80 requests for the sample watchlist. This project is
+intended for personal use.
 
-## Kurulum
+## Setup
 
-Gereksinimler: Python 3.12+, Docker Desktop, Node 20+ (yalnız WhatsApp gönderimi için).
+Requires Python 3.12+, Docker Desktop, and Node 20+ (only for WhatsApp sending).
 
 ```bash
 cp .env.example .env
 ```
 
-`.env` içinde **`LOCATION_LAT` / `LOCATION_LON`'u kendi koordinatınla değiştir** —
-varsayılanı yoktur, eksikse uygulama açılmaz. Konum, platformun `depots` listesiyle
-uygulanır; koordinat tek başına yok sayılır ve fiyatlar **sessizce** yanlış şehirden
-gelir.
+Then **set `LOCATION_LAT` / `LOCATION_LON` in `.env` to your own coordinates.**
+There is no default — the app refuses to start without them. Location is applied
+through the platform's `depots` list; coordinates alone are ignored and prices come
+back from the wrong city **silently**.
 
 ```bash
 docker compose up -d
@@ -120,67 +127,74 @@ pip install -r requirements.txt
 alembic upgrade head
 
 python -c "from app.database.session import SessionLocal; from app.services.depot_resolver import depolari_coz; db=SessionLocal(); print(depolari_coz(db)); db.close()"
-python seed.py                # örnek takip listesi (76 kalem)
-python gunluk_kosu.py         # ilk toplama
+python seed.py                # sample watchlist (76 items)
+python gunluk_kosu.py         # first collection
 ```
 
-API: <http://127.0.0.1:8000/docs> (`uvicorn app.main:app --reload`)
+API docs: <http://127.0.0.1:8000/docs> (`uvicorn app.main:app --reload`)
 
-### Günlük otomatik koşu (Windows)
+### Daily automation (Windows)
 
 ```powershell
 $action  = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -File scripts\gunluk-kosu.cmd"
 $trigger = New-ScheduledTaskTrigger -Daily -At 13:00
-$ayar    = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew
-Register-ScheduledTask -TaskName "IndirimYakalar-Toplama" -Action $action -Trigger $trigger -Settings $ayar
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew
+Register-ScheduledTask -TaskName "IndirimYakalar-Toplama" -Action $action -Trigger $trigger -Settings $settings
 ```
 
-`StartWhenAvailable` önemli: makine o saatte kapalıysa koşu açılışta telafi edilir.
-Sarmalayıcı betik gerekirse Docker'ı da başlatır.
+`StartWhenAvailable` matters: if the machine is off at that hour, the run is caught
+up on next boot. The wrapper script starts Docker if needed.
 
-## Test
+## Tests
 
 ```bash
 cd backend && pytest
 ```
 
-277 test. Çalışan bir PostgreSQL ister (`docker compose up -d`); ağa çıkmaz —
-platform istemcisi `MockTransport` ile, WhatsApp gönderimi taklit süreçle test edilir.
+279 tests. Requires a running PostgreSQL (`docker compose up -d`) — SQLite is not
+a substitute, since `ON CONFLICT` and `NUMERIC` behave differently and a stand-in
+database would give false confidence. Nothing touches the network: the platform
+client is tested through `MockTransport` and WhatsApp sending through a faked
+subprocess.
 
-## Durum
+## Status
 
-| Faz | Durum |
+| Phase | State |
 |---|---|
-| 0 — İskelet, PostgreSQL, FastAPI | ✅ |
-| 1 — Collector, şema, zaman serisi | ✅ |
-| 2 — Analyzer, WhatsApp mesajı | ✅ |
-| 3 — Broşür okuma (Vision LLM) | planlandı |
-| 4 — React panel | planlandı |
+| 0 — Skeleton, PostgreSQL, FastAPI | done |
+| 1 — Collector, schema, time series | done |
+| 2 — Analyzer, WhatsApp message | done |
+| 3 — Leaflet reading (vision LLM) | planned |
+| 4 — React dashboard | planned |
 
-WhatsApp'ın **otomatik** gönderimi çalışmıyor: kullanılan kütüphane WhatsApp Web'e
-şu an bağlanamıyor ve resmî Cloud API bu kullanıma kapalı (şablon değişkenlerinde
-satır başı yasak, gövde 1024 karakter). Ayrıntı: [`whatsapp/DURUM.md`](whatsapp/DURUM.md).
-Çalışan yol, HTML sayfasındaki tek tıklık `whatsapp://` bağlantısı.
+**Automatic** WhatsApp sending does not work. The library used to drive WhatsApp
+Web currently cannot connect, and the official Cloud API is closed to this use case
+(template parameters cannot contain newlines; body is capped at 1024 characters,
+while these messages run past 2,600). Details in
+[`whatsapp/DURUM.md`](whatsapp/DURUM.md). The working path is the one-click
+`whatsapp://` link on the generated HTML page.
 
-## Yapı
+## Layout
 
 ```
 backend/
   app/
-    api/          FastAPI router'ları
-    collectors/   platform istemcisi (tek HTTP çıkışı) + toplayıcı
+    api/          FastAPI routers
+    collectors/   platform client (the only HTTP exit) + collector
     models/       SQLAlchemy 2.x
-    services/     iş mantığı — analyzer, mesaj, yedek, normalize
-    utils/        tarih, biçim, dosya
+    services/     business logic — analyzer, messaging, backup, normalization
+    utils/        dates, formatting, files
   tests/
-  gunluk_kosu.py  günlük koşunun giriş noktası
-  restore.py      felaket kurtarma
-whatsapp/         WhatsApp gönderimi (Node) — bkz. DURUM.md
-scripts/          Görev Zamanlayıcı sarmalayıcısı
+  gunluk_kosu.py  daily run entry point
+  restore.py      disaster recovery
+whatsapp/         WhatsApp sending (Node) — see DURUM.md
+scripts/          Task Scheduler wrapper
 ```
 
-Kod Türkçe adlandırılmıştır; bu bilinçli bir tercihtir.
+Identifiers, comments and commit messages are in Turkish. That is deliberate: the
+domain is Turkish groceries and the reasoning reads better in the language the
+problem lives in.
 
-## Lisans
+## License
 
-MIT — bkz. [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
