@@ -29,6 +29,20 @@ from app.services.whatsapp_sender import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _kurulum_var(monkeypatch):
+    """Node tarafının kurulu olduğunu varsay.
+
+    Bu dosyadaki testler gönderim MANTIĞINI sınıyor ve `subprocess`'i zaten
+    taklit ediyor; `whatsapp/node_modules`'ün gerçekten var olması konuyla
+    ilgisiz. Sabitlenmezse testler geliştirme makinesinde geçip CI'da düşer —
+    nitekim düştü. Kontrolün kendisi aşağıda ayrıca test ediliyor.
+    """
+    monkeypatch.setattr(
+        whatsapp_sender, "_kurulum_durumu", lambda: (True, "kurulu")
+    )
+
+
 def _ayar(tmp_path: Path, **degisiklik) -> Settings:
     temel = {
         "whatsapp_enabled": True,
@@ -124,6 +138,25 @@ def test_gonderilebilir_mi_nedeni_soyluyor(tmp_path, degisiklik, beklenen) -> No
     uygun, neden = gonderilebilir_mi(_ayar(tmp_path, **degisiklik))
     assert uygun is False
     assert beklenen in neden
+
+
+def test_node_kurulu_degilse_gonderilmiyor(tmp_path, monkeypatch) -> None:
+    """`npm install` yapılmamışsa gönderim denenmemeli — asıl kontrol budur."""
+    monkeypatch.setattr(
+        whatsapp_sender, "_kurulum_durumu",
+        lambda: (False, "whatsapp/node_modules yok — `npm install` gerekli"),
+    )
+    uygun, neden = gonderilebilir_mi(_ayar(tmp_path))
+    assert uygun is False
+    assert "npm install" in neden
+
+
+def test_kurulum_durumu_gercek_dosyalara_bakiyor() -> None:
+    """Kontrolün kendisi taklit edilmeden: gonder.js repoda olmalı."""
+    from app.services.whatsapp_sender import _GONDER_JS
+
+    assert _GONDER_JS.exists(), "whatsapp/gonder.js repoda bulunmalı"
+    assert _GONDER_JS.name == "gonder.js"
 
 
 # --- başarılı gönderim ---------------------------------------------------

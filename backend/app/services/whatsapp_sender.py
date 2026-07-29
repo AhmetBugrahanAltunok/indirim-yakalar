@@ -57,6 +57,20 @@ def _node_yolu(settings: Settings) -> str:
     return (settings.whatsapp_node_path or "").strip() or "node"
 
 
+def _kurulum_durumu() -> tuple[bool, str]:
+    """Node tarafı kurulu mu.
+
+    Ayrı fonksiyon: gönderim mantığının testleri bu kontrolü değiştirebilsin.
+    Aksi halde testler `whatsapp/node_modules`'ün varlığına bağlı olurdu —
+    geliştirme makinesinde geçip CI'da düşen, yani değeri sahte testler.
+    """
+    if not _GONDER_JS.exists():
+        return False, f"gonder.js bulunamadı: {_GONDER_JS}"
+    if not (_GONDER_JS.parent / "node_modules").exists():
+        return False, "whatsapp/node_modules yok — `npm install` gerekli"
+    return True, "kurulu"
+
+
 def gonderilebilir_mi(settings: Settings | None = None) -> tuple[bool, str]:
     """(gönderilebilir, neden). Kapalıysa ya da eksik yapılandırma varsa False."""
     settings = settings or get_settings()
@@ -65,10 +79,10 @@ def gonderilebilir_mi(settings: Settings | None = None) -> tuple[bool, str]:
         return False, "WHATSAPP_ENABLED kapalı"
     if not (settings.whatsapp_recipient or "").strip():
         return False, "WHATSAPP_RECIPIENT boş"
-    if not _GONDER_JS.exists():
-        return False, f"gonder.js bulunamadı: {_GONDER_JS}"
-    if not (_GONDER_JS.parent / "node_modules").exists():
-        return False, "whatsapp/node_modules yok — `npm install` gerekli"
+
+    kurulu, neden = _kurulum_durumu()
+    if not kurulu:
+        return False, neden
     return True, "hazır"
 
 
