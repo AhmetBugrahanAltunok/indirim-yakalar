@@ -95,17 +95,19 @@ def mesajlari_yaz(
 def eski_mesajlari_temizle(
     settings: Settings | None = None, *, gun: date | None = None
 ) -> list[Path]:
-    """Saklama süresini aşan mesaj dosyalarını siler."""
+    """Saklama süresini aşan mesaj dosyalarını siler (.txt ve .html)."""
     settings = settings or get_settings()
     gun = gun or yerel_bugun()
 
-    silinen = tarihli_dosyalari_temizle(
-        mesaj_dizini(settings),
-        onek=DOSYA_ONEKI,
-        uzanti=DOSYA_UZANTISI,
-        gun=gun,
-        saklanan_gun=settings.backup_retention_days,
-    )
+    silinen: list[Path] = []
+    for uzanti in (DOSYA_UZANTISI, ".html"):
+        silinen.extend(tarihli_dosyalari_temizle(
+            mesaj_dizini(settings),
+            onek=DOSYA_ONEKI,
+            uzanti=uzanti,
+            gun=gun,
+            saklanan_gun=settings.backup_retention_days,
+        ))
     if silinen:
         logger.info("%d eski mesaj dosyası silindi", len(silinen))
     return silinen

@@ -25,6 +25,7 @@ from app.services.backup import (
     yedek_al,
 )
 from app.services.message_export import eski_mesajlari_temizle, mesajlari_yaz
+from app.services.message_html import html_yaz
 from app.services.pipeline_runner import bugun_toplandi_mi, pipeline_calistir
 from app.services.whatsapp_sender import WhatsAppHatasi, mesajlari_gonder
 from app.utils.tarih import yerel_bugun
@@ -83,6 +84,9 @@ def main(argv: list[str] | None = None) -> int:
             yazilan = mesajlari_yaz(db, gun=gun)
             for yol in yazilan:
                 logger.info("Mesaj: %s", yol)
+            sayfa = html_yaz(db, gun=gun)
+            if sayfa is not None:
+                logger.info("Tıklanabilir sayfa: %s", sayfa)
             for silinen in eski_mesajlari_temizle(gun=gun):
                 logger.info("Eski mesaj silindi: %s", silinen.name)
         except Exception as hata:  # noqa: BLE001 — koşuyu düşürmemeli
