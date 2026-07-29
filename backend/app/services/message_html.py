@@ -133,12 +133,13 @@ def html_yaz(
     *,
     gun: date | None = None,
     settings: Settings | None = None,
+    taban_gun: date | None = None,
 ) -> Path | None:
     """Tıklanabilir sayfayı yazar. Söylenecek bir şey yoksa None."""
     settings = settings or get_settings()
     gun = gun or yerel_bugun()
 
-    analizler = tum_kalemleri_analiz_et(db, settings=settings)
+    analizler = tum_kalemleri_analiz_et(db, settings=settings, taban_gun=taban_gun)
     mesajlar = whatsapp_mesajlari(analizler, gun=gun, settings=settings)
     if not mesajlar:
         return None

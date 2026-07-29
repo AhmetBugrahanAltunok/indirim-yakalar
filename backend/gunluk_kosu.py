@@ -24,8 +24,10 @@ from app.services.backup import (
     eski_yedekleri_temizle,
     yedek_al,
 )
+from app.services.analyzer import son_gozlem_gunu
 from app.services.message_export import eski_mesajlari_temizle, mesajlari_yaz
 from app.services.message_html import html_yaz
+from app.services.message_schedule import mesaj_gunu_mu, mesaj_uretildi
 from app.services.pipeline_runner import bugun_toplandi_mi, pipeline_calistir
 from app.services.whatsapp_sender import WhatsAppHatasi, mesajlari_gonder
 from app.utils.tarih import yerel_bugun
@@ -54,6 +56,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="WhatsApp gönderimini atla (dosya yine yazılır)",
     )
+    ayristirici.add_argument(
+        "--mesaj-zorla",
+        action="store_true",
+        dest="mesaj_zorla",
+        help="Mesaj günü olmasa da mesajı üret",
+    )
     args = ayristirici.parse_args(argv)
 
     gun = yerel_bugun()
@@ -79,14 +87,27 @@ def main(argv: list[str] | None = None) -> int:
 
         # Mesaj yazımı yedekten ÖNCE ve kendi hatasına dayanıklı: mesaj
         # üretilemese bile toplanan veri yedeklenmeli.
+        # Veri HER GÜN toplanır, mesaj N günde bir üretilir.
         yazilan: list = []
         try:
-            yazilan = mesajlari_yaz(db, gun=gun)
-            for yol in yazilan:
-                logger.info("Mesaj: %s", yol)
-            sayfa = html_yaz(db, gun=gun)
-            if sayfa is not None:
-                logger.info("Tıklanabilir sayfa: %s", sayfa)
+            karar = mesaj_gunu_mu(gun=gun, zorla=args.mesaj_zorla)
+            if not karar.uretilecek:
+                logger.info("Mesaj üretilmedi: %s", karar.neden)
+            else:
+                logger.info("Mesaj üretiliyor: %s", karar.neden)
+                yazilan = mesajlari_yaz(db, gun=gun, taban_gun=karar.taban_gun)
+                for yol in yazilan:
+                    logger.info("Mesaj: %s", yol)
+                sayfa = html_yaz(db, gun=gun, taban_gun=karar.taban_gun)
+                if sayfa is not None:
+                    logger.info("Tıklanabilir sayfa: %s", sayfa)
+
+                # Takvim ancak dosya ÜRETİLDİYSE ilerletilir. Söylenecek bir
+                # şey yokken ilerletmek, sayacı boşa harcayıp bir sonraki
+                # gerçek mesajı 3 gün geciktirirdi.
+                if yazilan:
+                    mesaj_uretildi(son_gozlem_gunu(db) or gun, gun=gun)
+
             for silinen in eski_mesajlari_temizle(gun=gun):
                 logger.info("Eski mesaj silindi: %s", silinen.name)
         except Exception as hata:  # noqa: BLE001 — koşuyu düşürmemeli

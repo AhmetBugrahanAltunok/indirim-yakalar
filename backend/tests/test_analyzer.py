@@ -132,7 +132,11 @@ def test_en_ucuz_bagli_tum_idler_birlestirilerek_bulunur(db) -> None:
 
 
 def test_ayni_zincirin_en_ucuz_subesi_alinir(db) -> None:
-    """`a101-XXXX` 70,00 ⟷ `a101-YYYY` 55,00 — zincir tek satırda görünmeli."""
+    """Aynı zincirin iki şubesi 70,00 ⟷ 55,00 — zincir tek satırda görünmeli.
+
+    26.07.2026'da gerçek veride görüldü; şube kimlikleri kasada, burada değil
+    (anayasa md. 5: test verisinde gerçek mağaza ID'si kullanılmaz).
+    """
     a101 = _market(db, "a101", "A101")
     pahali = _depo(db, f"{ONEK}-a101-pahali", a101)
     ucuz = _depo(db, f"{ONEK}-a101-ucuz", a101)
@@ -269,6 +273,68 @@ def test_en_son_iki_gozlem_gunu_kiyaslanir(db) -> None:
     assert dusus.onceki_gun == GUN2
     assert dusus.onceki_fiyat == Decimal("90.00")
     assert dusus.son_fiyat == Decimal("85.00")
+
+
+def test_taban_gun_verilince_o_gune_gore_kiyaslaniyor(db) -> None:
+    """Mesaj 3 günde bir gidiyorsa kıyas da son mesajdan bu yana olmalı.
+
+    Yalnız son iki günü kıyaslamak, arada olmuş bir indirimi mesaja hiç
+    sokmazdı: aşağıda 100 → 90 → 88 var; son iki güne bakan %2 görür,
+    üç güne bakan %12.
+    """
+    m = _market(db, "sok", "ŞOK")
+    d = _depo(db, f"{ONEK}-sok-taban", m)
+    gun3 = GUN2 + timedelta(days=1)
+    kalem = _kalem(db, "Taban", [f"{ONEK}40"])
+    _fiyat(db, f"{ONEK}40", d, GUN1, "100.00")
+    _fiyat(db, f"{ONEK}40", d, GUN2, "90.00")
+    _fiyat(db, f"{ONEK}40", d, gun3, "88.00")
+
+    varsayilan = kalem_analiz_et(db, kalem).dusus
+    assert varsayilan.onceki_fiyat == Decimal("90.00")
+
+    tabanli = kalem_analiz_et(db, kalem, taban_gun=GUN1).dusus
+    assert tabanli.onceki_gun == GUN1
+    assert tabanli.onceki_fiyat == Decimal("100.00")
+    assert tabanli.fark == Decimal("12.00")
+
+
+def test_taban_gununde_gozlem_yoksa_oncekine_dusuluyor(db) -> None:
+    """İstenen tarihte toplama yapılmamış olabilir (makine kapalıydı).
+
+    O gün yok diye kıyastan vazgeçmek, gerçekten olmuş bir indirimi gizlerdi.
+    """
+    m = _market(db, "sok", "ŞOK")
+    d = _depo(db, f"{ONEK}-sok-bosluk2", m)
+    gun5 = GUN1 + timedelta(days=5)
+    kalem = _kalem(db, "Bosluklu taban", [f"{ONEK}41"])
+    _fiyat(db, f"{ONEK}41", d, GUN1, "100.00")
+    _fiyat(db, f"{ONEK}41", d, gun5, "80.00")
+
+    # GUN1+2'de gözlem yok; en yakın ÖNCEKİ gözlem GUN1.
+    dusus = kalem_analiz_et(db, kalem, taban_gun=GUN1 + timedelta(days=2)).dusus
+    assert dusus.onceki_gun == GUN1
+
+
+def test_taban_gun_tum_gozlemlerden_eskiyse_en_eskiye_dusuluyor(db) -> None:
+    m = _market(db, "sok", "ŞOK")
+    d = _depo(db, f"{ONEK}-sok-eski", m)
+    kalem = _kalem(db, "Eski taban", [f"{ONEK}42"])
+    _fiyat(db, f"{ONEK}42", d, GUN1, "100.00")
+    _fiyat(db, f"{ONEK}42", d, GUN2, "80.00")
+
+    dusus = kalem_analiz_et(db, kalem, taban_gun=GUN1 - timedelta(days=30)).dusus
+    assert dusus.onceki_gun == GUN1
+
+
+def test_tek_gozlemde_taban_gun_de_dusus_uretmiyor(db) -> None:
+    """Bir günü kendisiyle kıyaslamak "değişim yok" der; bu bilgi değil gürültü."""
+    m = _market(db, "sok", "ŞOK")
+    d = _depo(db, f"{ONEK}-sok-tekgun", m)
+    kalem = _kalem(db, "Tek gozlem", [f"{ONEK}43"])
+    _fiyat(db, f"{ONEK}43", d, GUN1, "100.00")
+
+    assert kalem_analiz_et(db, kalem, taban_gun=GUN1).dusus is None
 
 
 def test_en_ucuz_market_degisince_isaretleniyor(db) -> None:

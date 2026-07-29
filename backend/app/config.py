@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     # "dosya sayısı artmasın" diye yükseltilmesini istedi. Bölme mekanizması
     # duruyor — liste büyürse tek mesaj okunmaz hale gelmesin.
     message_item_limit: int = 100
+    # Mesaj kaç günde bir üretilsin. Veri HER GÜN toplanır; bu yalnız alıcıya
+    # gidecek mesajın sıklığı (proje sahibi 29.07.2026'da 3 gün istedi).
+    message_interval_days: int = 3
 
     # --- WhatsApp gönderimi ---
     # ⚠️ Resmî API DEĞİL: kullanıcının kendi WhatsApp Web oturumu taklit edilir

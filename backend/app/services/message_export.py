@@ -52,8 +52,12 @@ def mesajlari_yaz(
     *,
     gun: date | None = None,
     settings: Settings | None = None,
+    taban_gun: date | None = None,
 ) -> list[Path]:
     """Güncel analizden mesaj üretip dosyaya yazar. Yazılan dosyaları döner.
+
+    `taban_gun` verilirse düşüşler o güne göre hesaplanır — mesaj 3 günde bir
+    gidiyorsa kıyas da son mesajdan bu yana olmalı.
 
     Söylenecek bir şey yoksa hiçbir dosya yazılmaz — boş bir dosya bırakmak,
     kullanıcıyı açıp bakmaya sonra da boşuna uğraşmaya iterdi.
@@ -61,7 +65,7 @@ def mesajlari_yaz(
     settings = settings or get_settings()
     gun = gun or yerel_bugun()
 
-    analizler = tum_kalemleri_analiz_et(db, settings=settings)
+    analizler = tum_kalemleri_analiz_et(db, settings=settings, taban_gun=taban_gun)
     mesajlar = whatsapp_mesajlari(analizler, gun=gun, settings=settings)
 
     if not mesajlar:

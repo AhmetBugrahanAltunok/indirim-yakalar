@@ -11,9 +11,9 @@ ortak depo yok). Bu yüzden en ucuz, kaleme bağlı TÜM `source_product_id`'ler
 birleştirilerek hesaplanır; platformun `percentage` alanı tek kayıt içinde
 geçerlidir ve tek başına yetki değildir (anayasa md. 7).
 
-Aynı zincirin şubeleri farklı fiyat verebiliyor (`a101-XXXX` 70,00 ⟷
-`a101-YYYY` 55,00), bu yüzden zincir düzeyinde **en ucuz şube** alınır. Mesajda
-zincir adı yazılır, şube iddiası edilmez.
+Aynı zincirin şubeleri farklı fiyat verebiliyor (26.07.2026'da aynı zincirin iki
+şubesi arasında 70,00 ⟷ 55,00 farkı görüldü), bu yüzden zincir düzeyinde **en
+ucuz şube** alınır. Mesajda zincir adı yazılır, şube iddiası edilmez.
 """
 
 from __future__ import annotations
@@ -149,8 +149,15 @@ def kalem_analiz_et(
     kalem: WatchlistItem,
     *,
     settings: Settings | None = None,
+    taban_gun: date | None = None,
 ) -> KalemAnalizi | None:
-    """Tek kalemi analiz eder. Hiç fiyat gözlemi yoksa None."""
+    """Tek kalemi analiz eder. Hiç fiyat gözlemi yoksa None.
+
+    `taban_gun` verilirse düşüş, o güne (ya da ondan önceki en yakın gözleme)
+    göre hesaplanır. Mesaj 3 günde bir gidiyorsa kıyas da **son mesajdan bu
+    yana** olmalı; yalnız son iki günü kıyaslamak, arada olmuş bir indirimi
+    mesaja hiç sokmazdı.
+    """
     settings = settings or get_settings()
 
     gunluk = _gunluk_market_fiyatlari(db, kalem.id)
@@ -163,10 +170,8 @@ def kalem_analiz_et(
     market_fiyatlari = sorted(gunluk[son_gun], key=lambda m: (m.fiyat, m.slug))
 
     dusus = None
-    if len(gunler) >= 2:
-        # ⚠️ "Bir önceki gün" değil "bir önceki GÖZLEM günü": aradaki boşluk
-        # gerçek olabilir ve tarihler mesaja olduğu gibi yazılır (SPEC §6.3).
-        onceki_gun = gunler[-2]
+    onceki_gun = _taban_gunu_sec(gunler, taban_gun)
+    if onceki_gun is not None:
         onceki = sorted(gunluk[onceki_gun], key=lambda m: (m.fiyat, m.slug))
         if onceki and market_fiyatlari:
             dusus = DususBilgisi(
@@ -185,6 +190,33 @@ def kalem_analiz_et(
         market_fiyatlari=market_fiyatlari,
         dusus=dusus,
     )
+
+
+def son_gozlem_gunu(db: Session) -> date | None:
+    """Veritabanındaki en güncel gözlem günü. Hiç veri yoksa None."""
+    return db.scalar(select(func.max(PriceHistory.collected_date)))
+
+
+def _taban_gunu_sec(gunler: list[date], taban_gun: date | None) -> date | None:
+    """Karşılaştırma yapılacak gözlem günü. Kıyas mümkün değilse None.
+
+    `taban_gun` yoksa bir önceki gözlem günü kullanılır. Varsa, o güne eşit ya
+    da ondan ÖNCEKİ en yakın gözlem seçilir — istenen tarihte toplama yapılmamış
+    olabilir (makine kapalıydı) ve o gün yok diye kıyastan vazgeçmek, gerçekten
+    olmuş bir indirimi gizlemek olurdu.
+
+    Son gözlemin kendisi taban olamaz: bir günü kendisiyle kıyaslamak "değişim
+    yok" der ve bu bilgi değil, gürültüdür.
+    """
+    if len(gunler) < 2:
+        return None
+    if taban_gun is None:
+        return gunler[-2]
+
+    adaylar = [g for g in gunler[:-1] if g <= taban_gun]
+    # İstenen tarihten önce hiç gözlem yoksa elde olan en eskiye düşülür:
+    # "3 gün öncesine göre" diyemesek de "elimizdeki en eskiye göre" diyebiliriz.
+    return adaylar[-1] if adaylar else gunler[0]
 
 
 def kalem_fiyat_gecmisi(
@@ -245,6 +277,7 @@ def tum_kalemleri_analiz_et(
     *,
     yalniz_aktif: bool = True,
     settings: Settings | None = None,
+    taban_gun: date | None = None,
 ) -> list[KalemAnalizi]:
     """Takip listesinin tamamını analiz eder. Gözlemi olmayan kalemler düşer."""
     settings = settings or get_settings()
@@ -255,7 +288,9 @@ def tum_kalemleri_analiz_et(
 
     sonuclar = []
     for kalem in db.scalars(sorgu):
-        analiz = kalem_analiz_et(db, kalem, settings=settings)
+        analiz = kalem_analiz_et(
+            db, kalem, settings=settings, taban_gun=taban_gun
+        )
         if analiz is not None:
             sonuclar.append(analiz)
     return sonuclar
