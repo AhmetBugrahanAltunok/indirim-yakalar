@@ -1,0 +1,95 @@
+name: Testler
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+
+    # Testler gercek bir PostgreSQL ister: sema kisitlari (ON CONFLICT,
+    # UniqueConstraint) ve NUMERIC davranisi SQLite'ta ayni degil, taklit
+    # veritabani yanlis guven verirdi.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: indirim
+          POSTGRES_PASSWORD: indirim
+          POSTGRES_DB: indirim_yakalar
+          LANG: C.UTF-8
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U indirim -d indirim_yakalar"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+psycopg://indirim:indirim@localhost:5432/indirim_yakalar
+      # Konum zorunlu ve varsayilansiz (yanlis sehirden veri toplamak SESSIZ bir
+      # hata olurdu). CI'da yer tutucu yeter — testler aga cikmiyor.
+      LOCATION_LAT: "39.9200"
+      LOCATION_LON: "32.8500"
+      # Acik birakilsaydi uygulamayi baslatmak gercek API'ye istek atardi.
+      PIPELINE_AUTOSTART: "false"
+      WHATSAPP_ENABLED: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Bagimliliklar
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Sema
+        working-directory: backend
+        run: python -m alembic upgrade head
+
+      - name: Testler
+        working-directory: backend
+        run: python -m pytest -q
+
+  sizinti-taramasi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Depo public olacak. Konum/kimlik verisinin kazara girmesi sessiz bir
+      # hata olurdu: kimse fark etmez, geri de alinamaz (GitHub eski commit'i
+      # SHA ile erisilebilir tutar).
+      - name: Konum ve kimlik verisi taramasi
+        run: |
+          set -e
+          hata=0
+          tara() {
+            echo "--- $1 ---"
+            if bulunan=$(git ls-files | xargs grep -inE "$2" 2>/dev/null | head -5) && [ -n "$bulunan" ]; then
+              echo "$bulunan"; hata=1
+            else
+              echo "  temiz"
+            fi
+          }
+          tara "Ev koordinati"        '3[0-9]\.[0-9]{4,}, ?3[0-9]\.[0-9]{4,}'
+          tara "Gercek magaza ID"     '(a101|bim|sok|migros|carrefour|tarim_kredi)-[A-Z][0-9]{3}'
+          tara "Anahtar/parola"       '(api[_-]?key|secret|token)[[:space:]]*[=:][[:space:]]*["'"'"'][^"'"'"'[:space:]]{8,}'
+          echo "--- .env izleniyor mu ---"
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo "  .env IZLENIYOR"; hata=1
+          else
+            echo "  izlenmiyor"
+          fi
+          exit $hata
