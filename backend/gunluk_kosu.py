@@ -29,6 +29,7 @@ from app.services.message_export import eski_mesajlari_temizle, mesajlari_yaz
 from app.services.message_html import html_yaz
 from app.services.message_schedule import mesaj_gunu_mu, mesaj_uretildi
 from app.services.pipeline_runner import bugun_toplandi_mi, pipeline_calistir
+from app.services.watchlist_health import bayat_kalemler
 from app.services.whatsapp_sender import WhatsAppHatasi, mesajlari_gonder
 from app.utils.tarih import yerel_bugun
 
@@ -87,6 +88,14 @@ def main(argv: list[str] | None = None) -> int:
 
         # Mesaj yazımı yedekten ÖNCE ve kendi hatasına dayanıklı: mesaj
         # üretilemese bile toplanan veri yedeklenmeli.
+        # Kör kalan kalemleri duyur. Toplama "başarılı" görünürken bir ürünün
+        # sessizce düşmesi, bu projede gerçekten yaşandı (29-31.07.2026).
+        try:
+            for bayat in bayat_kalemler(db):
+                logger.warning("BAYAT KALEM — %s", bayat.ozet())
+        except Exception as hata:  # noqa: BLE001 — teşhis, koşuyu düşürmemeli
+            logger.error("Bayat kalem kontrolü yapılamadı: %s", hata)
+
         # Veri HER GÜN toplanır, mesaj N günde bir üretilir.
         yazilan: list = []
         try:

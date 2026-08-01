@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import date
+from html import escape
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -28,6 +29,7 @@ from app.config import Settings, get_settings
 from app.services.analyzer import tum_kalemleri_analiz_et
 from app.services.message_builder import whatsapp_mesajlari
 from app.services.message_export import mesaj_dizini
+from app.services.watchlist_health import bayat_kalemler
 from app.utils.bicim import tarih_yaz
 from app.utils.tarih import yerel_bugun
 
@@ -68,11 +70,19 @@ _SAYFA = """<!doctype html>
     max-height: 22rem; overflow-y: auto;
   }}
   .not {{ font-size: .8rem; opacity: .65; margin-top: .8rem; }}
+  /* Operatör uyarısı — mesajın parçası DEĞİL, kopyalanan metne girmez. */
+  .uyari {{
+    border: 1px solid rgba(200,140,0,.55); border-radius: .6rem;
+    padding: .9rem 1rem; margin-bottom: 1.5rem; font-size: .87rem;
+  }}
+  .uyari b {{ display: block; margin-bottom: .35rem; }}
+  .uyari ul {{ margin: .4rem 0 0; padding-left: 1.1rem; }}
 </style>
 </head>
 <body>
 <h1>🛒 Market Fiyatları</h1>
 <div class="tarih">{tarih} · {sayfa_sayisi}</div>
+{uyari_blogu}
 <div id="icerik"></div>
 <script>
 const MESAJLAR = {mesajlar_json};
@@ -157,6 +167,7 @@ def html_yaz(
         _SAYFA.format(
             tarih=tarih_yaz(gozlem),
             sayfa_sayisi=sayfa_sayisi,
+            uyari_blogu=_uyari_blogu(db, settings),
             # json.dumps hem kaçışı hem tırnakları doğru yapar; elle string
             # birleştirmek emoji/tırnak/satır başı yüzünden bozuk HTML üretirdi.
             mesajlar_json=json.dumps([m.metin for m in mesajlar], ensure_ascii=False),
@@ -171,3 +182,32 @@ def html_yaz(
 
 def _sadece_rakam(ham: str | None) -> str:
     return "".join(k for k in (ham or "") if k.isdigit())
+
+
+def _uyari_blogu(db: Session, settings: Settings) -> str:
+    """Kör kalan kalemlerin uyarısı — sayfada görünür, mesaja GİRMEZ.
+
+    Bu bilgi alıcıyı değil seni ilgilendiriyor. Mesaj metnine koymak, annene
+    "Safya Ayçiçek Yağı veri vermiyor" yazmak olurdu. Bu yüzden HTML gövdesinde
+    duruyor; kopyalanan metin yalnız `MESAJLAR` dizisinden gelir.
+    """
+    try:
+        bayatlar = bayat_kalemler(db, settings=settings)
+    except Exception:  # noqa: BLE001 — teşhis, sayfayı düşürmemeli
+        return ""
+
+    if not bayatlar:
+        return ""
+
+    satirlar = "".join(f"<li>{escape(b.ozet())}</li>" for b in bayatlar[:10])
+    fazla = (
+        f"<li>… ve {len(bayatlar) - 10} kalem daha</li>" if len(bayatlar) > 10 else ""
+    )
+    return (
+        '<div class="uyari"><b>⚠️ Veri vermeyen takip kalemi: '
+        f"{len(bayatlar)}</b>"
+        "<ul>" + satirlar + fazla + "</ul>"
+        "<div class=\"not\">Platform ürünü katalogdan düşürmüş ya da geçici "
+        "olarak boş döndürüyor olabilir. Kalıcıysa listeden çıkar ya da yerine "
+        "yenisini bağla. Bu uyarı mesaja dahil değildir.</div></div>"
+    )

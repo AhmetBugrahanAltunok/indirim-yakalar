@@ -147,6 +147,34 @@ def test_kalem_siniri_uygulaniyor() -> None:
         assert mesaj["kalem_sayisi"] <= 3
 
 
+def test_bayat_kalem_ucu_sozlesmesi() -> None:
+    resp = client.get("/watchlist/stale")
+    assert resp.status_code == 200
+
+    for kalem in resp.json():
+        assert set(kalem) == {
+            "kalem_id", "etiket", "son_veri", "gun_farki",
+            "bagli_id_sayisi", "hic_veri_yok",
+        }
+        # Hiç verisi yoksa gün farkı anlamsızdır ve null olmalı.
+        if kalem["hic_veri_yok"]:
+            assert kalem["son_veri"] is None
+            assert kalem["gun_farki"] is None
+        else:
+            assert kalem["gun_farki"] >= 0
+
+
+def test_bayat_esigi_yukseltilince_liste_kisalir() -> None:
+    az = len(client.get("/watchlist/stale?esik_gun=1").json())
+    cok = len(client.get("/watchlist/stale?esik_gun=90").json())
+    assert cok <= az
+
+
+def test_gecersiz_bayat_esigi_reddediliyor() -> None:
+    assert client.get("/watchlist/stale?esik_gun=-1").status_code == 422
+    assert client.get("/watchlist/stale?esik_gun=999").status_code == 422
+
+
 def test_gecersiz_kalem_siniri_reddediliyor() -> None:
     assert client.get("/messages/whatsapp-preview?kalem_siniri=0").status_code == 422
     assert client.get("/messages/whatsapp-preview?kalem_siniri=999").status_code == 422

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.models import WatchlistItem
 from app.schemas.analysis import (
+    BayatKalemOut,
     DususOut,
     FiyatGecmisiNoktasi,
     FiyatGecmisiOut,
@@ -27,6 +28,7 @@ from app.services.analyzer import (
     tum_kalemleri_analiz_et,
 )
 from app.services.message_builder import whatsapp_mesajlari
+from app.services.watchlist_health import bayat_kalemler
 
 router = APIRouter(tags=["analiz"])
 
@@ -110,6 +112,32 @@ def fiyat_gecmisi(kalem_id: int, db: Session = Depends(get_db)) -> FiyatGecmisiO
         gozlem_gunu_sayisi=len(gunluk),
         noktalar=noktalar,
     )
+
+
+@router.get("/watchlist/stale", response_model=list[BayatKalemOut])
+def bayat_kalem_listesi(
+    db: Session = Depends(get_db),
+    esik_gun: int | None = Query(
+        None, ge=0, le=90,
+        description="Kaç gün geride kalan uyarılsın. Verilmezse STALE_ITEM_DAYS.",
+    ),
+) -> list[BayatKalemOut]:
+    """Veri vermeyen takip kalemleri.
+
+    Kıyas bugüne göre değil **son gözlem gününe** göredir: platform bir gün
+    indekslemezse bütün liste bayat görünür ve uyarı anlamını yitirirdi.
+    """
+    return [
+        BayatKalemOut(
+            kalem_id=b.kalem_id,
+            etiket=b.etiket,
+            son_veri=b.son_veri,
+            gun_farki=b.gun_farki,
+            bagli_id_sayisi=b.bagli_id_sayisi,
+            hic_veri_yok=b.hic_veri_yok,
+        )
+        for b in bayat_kalemler(db, esik_gun=esik_gun)
+    ]
 
 
 @router.get("/messages/whatsapp-preview", response_model=MesajYanit)

@@ -72,6 +72,22 @@ class FiyatGecmisiOut(BaseModel):
     noktalar: list[FiyatGecmisiNoktasi]
 
 
+class BayatKalemOut(BaseModel):
+    kalem_id: int
+    etiket: str
+    son_veri: date | None = Field(description="Son fiyat gözlemi; hiç yoksa null")
+    gun_farki: int | None = Field(
+        description="Son gözlem gününe göre kaç gün geride; hiç verisi yoksa null"
+    )
+    bagli_id_sayisi: int = Field(
+        description=(
+            "Kaleme bağlı platform ID sayısı. Birden fazlaysa biri düşse de "
+            "fiyat akmaya devam edebilir."
+        )
+    )
+    hic_veri_yok: bool
+
+
 class MesajOut(BaseModel):
     metin: str
     sayfa: int

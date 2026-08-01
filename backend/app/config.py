@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # Mesaj kaç günde bir üretilsin. Veri HER GÜN toplanır; bu yalnız alıcıya
     # gidecek mesajın sıklığı (proje sahibi 29.07.2026'da 3 gün istedi).
     message_interval_days: int = 3
+    # Bir takip kalemi son gözlem gününe göre kaç gün geride kalırsa uyarılır.
+    # Platform bir ürünü geçici olarak boş döndürebiliyor; 1 gün gürültü olurdu.
+    stale_item_days: int = 2
 
     # --- WhatsApp gönderimi ---
     # ⚠️ Resmî API DEĞİL: kullanıcının kendi WhatsApp Web oturumu taklit edilir
