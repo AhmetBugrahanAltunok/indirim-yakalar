@@ -170,14 +170,30 @@ def html_yaz(
             uyari_blogu=_uyari_blogu(db, settings),
             # json.dumps hem kaçışı hem tırnakları doğru yapar; elle string
             # birleştirmek emoji/tırnak/satır başı yüzünden bozuk HTML üretirdi.
-            mesajlar_json=json.dumps([m.metin for m in mesajlar], ensure_ascii=False),
-            alici_json=json.dumps(_sadece_rakam(settings.whatsapp_recipient)),
+            mesajlar_json=_js_gomulebilir([m.metin for m in mesajlar]),
+            alici_json=_js_gomulebilir(_sadece_rakam(settings.whatsapp_recipient)),
         ),
         encoding="utf-8",
     )
 
     logger.info("Tıklanabilir sayfa: %s", hedef)
     return hedef
+
+
+def _js_gomulebilir(deger: object) -> str:
+    """JSON'u `<script>` bloğuna gömülebilir hâle getirir.
+
+    `json.dumps` JS için doğru kaçış yapar ama `/` karakterine dokunmaz. Ürün
+    adında `</script>` geçseydi tarayıcı bloğu ORADA kapatır, kalan metni HTML
+    olarak yorumlardı — yani platformdan gelen bir ad sayfaya kod sokabilirdi.
+    Ürün adları dış kaynaktan geliyor ve doğrulanmıyor, o yüzden burada kesiliyor.
+    """
+    return (
+        json.dumps(deger, ensure_ascii=False)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+    )
 
 
 def _sadece_rakam(ham: str | None) -> str:

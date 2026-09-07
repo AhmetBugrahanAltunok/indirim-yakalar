@@ -182,6 +182,27 @@ def test_json_gomme_bozuk_html_uretmiyor(db, tmp_path) -> None:
     assert 'Süt "Tam Yağlı" 1 L' in json.loads(gomulu.group(1))[0]
 
 
+def test_urun_adi_script_blogunu_kapatamiyor(db, tmp_path) -> None:
+    """Ürün adları dış kaynaktan gelir ve doğrulanmaz.
+
+    `json.dumps` JS için doğru kaçış yapar ama `/` karakterine dokunmaz.
+    Adda `</script>` geçseydi tarayıcı bloğu orada kapatır, kalanını HTML
+    olarak yorumlardı — platformdan gelen bir ad sayfaya kod sokabilirdi.
+    """
+    zararli = "Süt 1 L </script><script>alert(1)</script>"
+    _kalem_kur(db, zararli, f"{ONEK}07", {"a101": "30.00", "bim": "35.00"})
+    yol = html_yaz(db, gun=GUN, settings=_ayar(tmp_path))
+    icerik = yol.read_text(encoding="utf-8")
+
+    # Sayfada tek bir script bloğu var; kapanışı da tek olmalı.
+    assert icerik.count("</script>") == 1
+
+    # Ad kaybolmadı, yalnızca kaçırıldı: JSON çözülünce aynen geri geliyor.
+    gomulu = re.search(r"const MESAJLAR = (\[.*?\]);", icerik, re.S)
+    assert gomulu is not None
+    assert zararli in json.loads(gomulu.group(1))[0]
+
+
 # --- çok sayfa -----------------------------------------------------------
 
 

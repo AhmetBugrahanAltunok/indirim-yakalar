@@ -10,9 +10,9 @@ result into a plain WhatsApp message you can share.
 
 Prices come from [marketfiyati.org.tr](https://marketfiyati.org.tr), a public
 price-comparison platform covering the major Turkish grocery chains. You define a
-watchlist (a 76-item starter list ships with the project), the system pulls prices
-every day and every few days produces a "cheapest right now, and what dropped"
-message.
+watchlist — 76 products across 12 categories ship as a starter list — the system
+pulls prices every day and every few days produces a "cheapest right now, and what
+dropped" message.
 
 **Stack:** FastAPI · PostgreSQL 16 · SQLAlchemy 2.x · Alembic · APScheduler · pytest
 
@@ -136,6 +136,12 @@ Postgres is published on `127.0.0.1` only. The password in `docker-compose.yml` 
 a local development password; binding it to all interfaces would expose the
 database on any shared network.
 
+Product names arrive from the platform and are never trusted: the generated HTML
+page builds its DOM with `textContent` (never `innerHTML`), and the JSON embedded
+in its `<script>` block escapes `<`, `>` and `&`, so a product name containing
+`</script>` cannot close the block and inject markup. Subprocess calls
+(`pg_dump`, `psql`, `node`) always pass argument lists — never a shell string.
+
 ## Setup
 
 Requires **Python 3.12+**, **Docker Desktop**, and **Node 20+** (only for WhatsApp
@@ -231,7 +237,7 @@ Run `python -m alembic upgrade head` first.
 cd backend && pytest
 ```
 
-295 tests. They need a running PostgreSQL (`docker compose up -d`) — SQLite is not
+296 tests. They need a running PostgreSQL (`docker compose up -d`) — SQLite is not
 a substitute, since `ON CONFLICT` and `NUMERIC` behave differently and a stand-in
 database would give false confidence. Nothing touches the network: the platform
 client is tested through `MockTransport` and WhatsApp sending through a faked
