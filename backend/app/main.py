@@ -36,7 +36,7 @@ async def yasam_dongusu(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="İndirimYakalar",
     description="Market fiyatlarını toplayan, fiyat düşüşlerini yakalayan sistem.",
-    version="0.6.0",
+    version="0.6.0b1",
     lifespan=yasam_dongusu,
 )
 

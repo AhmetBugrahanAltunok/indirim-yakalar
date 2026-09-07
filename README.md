@@ -3,6 +3,7 @@
 [![Testler](https://github.com/AhmetBugrahanAltunok/indirim-yakalar/actions/workflows/testler.yml/badge.svg)](https://github.com/AhmetBugrahanAltunok/indirim-yakalar/actions/workflows/testler.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Status: beta](https://img.shields.io/badge/status-beta-orange)](#status)
 
 A personal system that collects Turkish grocery prices daily, finds the cheapest
 chain for each tracked product and any price drops over time, then turns the
@@ -250,6 +251,9 @@ described under [Privacy](#privacy).
 > every run** — do not repoint it at a path that holds anything you care about.
 
 ## Status
+
+**Beta — `0.6.0b1`.** Phases 0–2 run daily against real data; the interfaces below may still
+change and there is no compatibility promise yet.
 
 | Phase | State |
 |---|---|
