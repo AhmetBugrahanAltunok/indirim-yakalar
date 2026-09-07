@@ -1,5 +1,9 @@
 # İndirimYakalar
 
+[![Testler](https://github.com/AhmetBugrahanAltunok/indirim-yakalar/actions/workflows/testler.yml/badge.svg)](https://github.com/AhmetBugrahanAltunok/indirim-yakalar/actions/workflows/testler.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 A personal system that collects Turkish grocery prices daily, finds the cheapest
 chain for each tracked product and any price drops over time, then turns the
 result into a plain WhatsApp message you can share.
@@ -9,6 +13,8 @@ price-comparison platform covering the major Turkish grocery chains. You define 
 watchlist (a 76-item starter list ships with the project), the system pulls prices
 every day and every few days produces a "cheapest right now, and what dropped"
 message.
+
+**Stack:** FastAPI · PostgreSQL 16 · SQLAlchemy 2.x · Alembic · APScheduler · pytest
 
 ## What it produces
 
@@ -102,11 +108,38 @@ are blocked with `HTTP 418`. Accordingly:
 - On `418`, collection stops **immediately**
 
 One run per day, roughly 80 requests for the sample watchlist. This project is
-intended for personal use.
+intended for personal, non-commercial use.
+
+## Privacy
+
+This repository is deliberately free of personal data, and CI enforces it.
+
+**Not in this repo, and never committed:**
+
+| What | Where it lives instead |
+|---|---|
+| Your coordinates (`LOCATION_LAT` / `LOCATION_LON`) | `.env` — gitignored |
+| WhatsApp recipient number | `.env` — gitignored, ships empty on purpose |
+| WhatsApp session keys | `WHATSAPP_SESSION_DIR`, **outside** the repo |
+| Database dumps (real prices, depots, location) | `BACKUP_DIR`, **outside** the repo |
+| Generated messages (`.txt` / `.html`) | `MESSAGE_DIR`, outside the repo by default |
+
+The coordinates in `.env.example` and in CI are a placeholder (Ankara/Kızılay), not
+a real address. The recipient number ships blank rather than as a sample: a sample
+would mean anyone who copied the file and enabled sending would message a stranger.
+
+A [CI job](.github/workflows/testler.yml) fails the build if a real-looking
+coordinate pair, a real store ID, an API key, or a tracked `.env` ever appears in
+the tree.
+
+Postgres is published on `127.0.0.1` only. The password in `docker-compose.yml` is
+a local development password; binding it to all interfaces would expose the
+database on any shared network.
 
 ## Setup
 
-Requires Python 3.12+, Docker Desktop, and Node 20+ (only for WhatsApp sending).
+Requires **Python 3.12+**, **Docker Desktop**, and **Node 20+** (only for WhatsApp
+sending).
 
 ```bash
 cp .env.example .env
@@ -119,19 +152,49 @@ back from the wrong city **silently**.
 
 ```bash
 docker compose up -d
+```
 
+```bash
 cd backend
 python -m venv .venv
 .venv/Scripts/activate        # Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
 alembic upgrade head
+```
 
+Resolve the depots for your location once. This writes the depot list the collector
+filters by; without it every search would come back unscoped:
+
+```bash
 python -c "from app.database.session import SessionLocal; from app.services.depot_resolver import depolari_coz; db=SessionLocal(); print(depolari_coz(db)); db.close()"
+```
+
+```bash
 python seed.py                # sample watchlist (76 items)
 python gunluk_kosu.py         # first collection
 ```
 
 API docs: <http://127.0.0.1:8000/docs> (`uvicorn app.main:app --reload`)
+
+### Configuration
+
+Every setting is read from `.env`; nothing is hardcoded. The ones that matter:
+
+| Key | Default | Notes |
+|---|---|---|
+| `DATABASE_URL` | — | required |
+| `LOCATION_LAT` / `LOCATION_LON` | — | **required, no default** — a wrong value fails silently |
+| `LOCATION_DISTANCE_KM` | `10` | search radius |
+| `COLLECTOR_REQUEST_DELAY_SEC` | `2.0` | delay between requests to the platform |
+| `PIPELINE_AUTOSTART` | `false` | start the daily scheduler with the app |
+| `PIPELINE_SCHEDULE_HOUR` | `13` | platform indexes around noon |
+| `MESSAGE_INTERVAL_DAYS` | `3` | message frequency — collection stays daily regardless |
+| `MESSAGE_ITEM_LIMIT` | `100` | products per message before it splits |
+| `PRICE_DROP_THRESHOLD_PCT` | `5.0` | below this, a drop is not called a discount |
+| `BACKUP_DIR` | `../indirim-yakalar-yedek` | keep it outside the repo |
+| `WHATSAPP_ENABLED` | `false` | read the warning below before enabling |
+
+See [`.env.example`](.env.example) for the full annotated list.
 
 ### Daily automation (Windows)
 
@@ -145,17 +208,40 @@ Register-ScheduledTask -TaskName "IndirimYakalar-Toplama" -Action $action -Trigg
 `StartWhenAvailable` matters: if the machine is off at that hour, the run is caught
 up on next boot. The wrapper script starts Docker if needed.
 
+## Backup and restore
+
+`gunluk_kosu.py` runs `pg_dump` at the end of every collection, into `BACKUP_DIR`
+(outside the repo), keeping `BACKUP_RETENTION_DAYS` days.
+
+This is not decoration. The Docker `pgdata` volume has been destroyed twice, and
+**the platform does not serve historical prices** — a day that was not collected is
+gone permanently. Restoring from a dump is always preferred over rebuilding:
+
+```bash
+python restore.py --yedekten              # newest dump (recommended)
+python restore.py --yedekten --dosya X    # a specific dump
+python restore.py --sifirdan              # last resort: schema + watchlist only, no history
+```
+
+Run `python -m alembic upgrade head` first.
+
 ## Tests
 
 ```bash
 cd backend && pytest
 ```
 
-279 tests. Requires a running PostgreSQL (`docker compose up -d`) — SQLite is not
+295 tests. They need a running PostgreSQL (`docker compose up -d`) — SQLite is not
 a substitute, since `ON CONFLICT` and `NUMERIC` behave differently and a stand-in
 database would give false confidence. Nothing touches the network: the platform
 client is tested through `MockTransport` and WhatsApp sending through a faked
 subprocess.
+
+CI runs the same suite against PostgreSQL 16 on every push, plus the leak scan
+described under [Privacy](#privacy).
+
+> `pytest.ini` sets `--basetemp=.pytest-tmp`. **Pytest wipes that directory on
+> every run** — do not repoint it at a path that holds anything you care about.
 
 ## Status
 
@@ -167,12 +253,18 @@ subprocess.
 | 3 — Leaflet reading (vision LLM) | planned |
 | 4 — React dashboard | planned |
 
-**Automatic** WhatsApp sending does not work. The library used to drive WhatsApp
+**Automatic WhatsApp sending does not work.** The library used to drive WhatsApp
 Web currently cannot connect, and the official Cloud API is closed to this use case
 (template parameters cannot contain newlines; body is capped at 1024 characters,
 while these messages run past 2,600). Details in
 [`whatsapp/DURUM.md`](whatsapp/DURUM.md). The working path is the one-click
 `whatsapp://` link on the generated HTML page.
+
+> **Warning.** The `whatsapp/` directory drives WhatsApp Web through
+> `whatsapp-web.js`, which is **not** an official API — it automates your own
+> session. This is against WhatsApp's Terms of Service and carries a real risk of
+> the number being banned. It ships disabled (`WHATSAPP_ENABLED=false`) and the
+> HTML link path needs none of it. Enable it only if you accept that risk.
 
 ## Layout
 

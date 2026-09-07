@@ -10,8 +10,12 @@ services:
       # Locale sabit C.UTF-8: imajda tr_TR üretilmemiş durumda.
       # Türkçe normalizasyon (I→ı, İ→i) Python tarafında yapılıyor, DB collation'ına gerek yok.
       LANG: C.UTF-8
+    # Yalnizca 127.0.0.1'e baglanir. "5432:5432" yazilsaydi Postgres tum ag
+    # arayuzlerinden erisilebilir olurdu; parola bu dosyada duran gelistirme
+    # parolasi oldugu icin ortak bir agda (kafe, okul, ofis wifi'si) veritabani
+    # disariya acik kalirdi.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
